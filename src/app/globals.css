@@ -1,0 +1,199 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: #000000 !important;
+  font-family: var(--font-sans);
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* TARGETED FIXES FOR INVISIBLE TEXT */
+
+/* 1. Recent Activity section - make all text black except timestamps */
+.recent-activity p,
+.recent-activity span:not(.timestamp),
+.recent-activity div:not(.timestamp),
+.activity-item p,
+.activity-item span:not(.timestamp),
+.activity-item div:not(.timestamp) {
+  color: #000000 !important;
+  font-weight: 500 !important;
+}
+
+/* 2. Quick Actions heading - force black */
+.quick-actions h2,
+.quick-actions h3,
+.quick-actions .card-title,
+.quick-actions .title,
+.card h2,
+.card h3,
+.card .title {
+  color: #000000 !important;
+  font-weight: 600 !important;
+}
+
+/* 3. Sidebar menu items when not selected */
+.sidebar-menu a:not(.active),
+.sidebar-menu button:not(.active),
+.sidebar-menu li:not(.active),
+.menu-item:not(.active),
+nav a:not(.active),
+nav button:not(.active),
+.sidebar a:not(.active),
+.sidebar button:not(.active) {
+  color: #000000 !important;
+  font-weight: 500 !important;
+}
+
+/* 4. Dashboard content - ensure all text is black */
+.dashboard-content *,
+.dashboard-layout *,
+.main-content *,
+.card-content *,
+.stats-card *,
+.quick-action-card *,
+.website-card *,
+.quick-action-button *,
+.section-card * {
+  color: #000000 !important;
+}
+
+/* 5. Force all headings and titles */
+h1, h2, h3, h4, h5, h6,
+.card-title,
+.card-header h1,
+.card-header h2,
+.card-header h3,
+.card-header h4,
+.card-header h5,
+.card-header h6 {
+  color: #000000 !important;
+  font-weight: 600 !important;
+}
+
+/* 6. Common text classes that might be causing issues */
+.text-muted-foreground,
+.text-muted,
+.text-gray-500,
+.text-gray-600,
+.text-gray-700,
+.text-gray-800,
+.text-gray-900,
+.text-gray-950 {
+  color: #000000 !important;
+}
+
+/* 7. Button text fixes - white text on dark buttons */
+button,
+.btn,
+button[class*="bg-black"],
+button[class*="bg-gray-900"],
+button[class*="bg-gray-800"],
+button[class*="bg-blue-600"],
+button[class*="bg-blue-700"],
+button[class*="bg-indigo-600"],
+button[class*="bg-indigo-700"],
+button[class*="bg-purple-600"],
+button[class*="bg-purple-700"],
+button[class*="bg-green-600"],
+button[class*="bg-green-700"],
+button[class*="bg-red-600"],
+button[class*="bg-red-700"],
+input[type="submit"],
+input[type="button"],
+.button,
+[type="submit"],
+[type="button"] {
+  color: #ffffff !important;
+  font-weight: 500 !important;
+}
+
+/* Specific button classes from shadcn/ui */
+.btn-primary,
+.btn-secondary,
+.btn-outline,
+.btn-ghost {
+  color: #ffffff !important;
+}
+
+/* 9. Input fields and search bar fixes */
+input,
+textarea,
+select,
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="url"],
+.search-input,
+.search-bar,
+.search-box {
+  background-color: #f8f9fa !important;
+  color: #000000 !important;
+  border: 2px solid #e9ecef !important;
+  border-radius: 6px !important;
+  caret-color: #ffffff !important; /* White cursor */
+  font-weight: 400 !important;
+}
+
+/* Focus state for better visibility */
+input:focus,
+textarea:focus,
+select:focus,
+input[type="search"]:focus,
+.search-input:focus,
+.search-bar:focus {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border-color: #007bff !important;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
+  outline: none !important;
+}
+
+/* Placeholder text styling */
+input::placeholder,
+textarea::placeholder,
+input[type="search"]::placeholder {
+  color: #6c757d !important;
+  font-weight: 400 !important;
+}
+
+/* Search bar specific styling */
+.search-container,
+.search-wrapper,
+.search-form {
+  background-color: #f8f9fa !important;
+  border-radius: 8px !important;
+  padding: 4px !important;
+}
+
+/* 8. Emergency fallback - make everything black except icons and buttons */
+*:not(svg):not(path):not(circle):not(rect):not(line):not(polygon):not(polyline):not(ellipse):not(g):not(use):not(button):not(.btn):not(.button) {
+  color: #000000 !important;
+}
