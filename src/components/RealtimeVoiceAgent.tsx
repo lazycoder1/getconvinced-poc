@@ -2,9 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Mic, MicOff, Volume2, VolumeX } from "lucide-react";
-import { RealtimeAgent, RealtimeSession } from "@openai/agents-realtime";
-
-import { tool } from "@openai/agents/realtime";
+import { RealtimeAgent, RealtimeSession } from "@openai/agents/realtime";
 import { z } from "zod";
 import createDynamicScreenshotTools from "@/lib/dynamic-screenshot-tools";
 

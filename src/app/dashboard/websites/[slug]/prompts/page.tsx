@@ -40,8 +40,6 @@ export default function PromptsPage() {
         loadPrompts();
     }, [websiteSlug]);
 
-
-
     const loadPrompts = async () => {
         try {
             setLoading(true);
@@ -376,82 +374,86 @@ Remember to reference the screenshots provided to help users visually navigate H
 
             {/* Prompts List */}
             <div className="space-y-6">
-                {prompts.filter(prompt => prompt && prompt.id).map((prompt) => (
-                    <Card key={prompt.id} className="overflow-hidden">
-                        <CardHeader>
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <CardTitle className="flex items-center">
-                                        <FileText className="mr-2 w-5 h-5" />
-                                        {prompt.name || "Untitled Prompt"}
-                                    </CardTitle>
-                                    {prompt.description && <p className="mt-1 text-sm text-gray-600">{prompt.description}</p>}
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    <Badge variant={prompt?.is_active ? "default" : "secondary"}>
-                                        {prompt?.is_active ? "Active" : "Inactive"}
-                                    </Badge>
-                                </div>
-                            </div>
-                        </CardHeader>
-
-                        <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                {editingId === prompt.id ? (
-                                    <MarkdownEditor
-                                        value={prompt.content || ""}
-                                        onChange={(content) => {
-                                            setPrompts((prev) => prev.map((p) => (p && p.id === prompt.id ? { ...p, content } : p)));
-                                        }}
-                                        onSave={() => handlePromptSave(prompt.id, prompt.content || "")}
-                                        onCancel={() => setEditingId(null)}
-                                        title="Edit System Prompt"
-                                        description={`Editing: ${prompt.name}`}
-                                        isDirty={(prompt.content || "") !== (prompts.find((p) => p && p.id === prompt.id)?.content || "")}
-                                        isLoading={savingId === prompt.id}
-                                    />
-                                ) : (
+                {prompts
+                    .filter((prompt) => prompt && prompt.id)
+                    .map((prompt) => (
+                        <Card key={prompt.id} className="overflow-hidden">
+                            <CardHeader>
+                                <div className="flex justify-between items-center">
                                     <div>
-                                        <div className="flex justify-between items-center mb-2">
-                                            <label className="text-sm font-medium text-gray-900">Prompt Content</label>
-                                            <div className="flex items-center space-x-2">
-                                                <Button variant="outline" size="sm" onClick={() => handleToggleActive(prompt.id)}>
-                                                    {prompt?.is_active ? "Deactivate" : "Activate"}
-                                                </Button>
-                                                <Button variant="outline" size="sm" onClick={() => setEditingId(prompt.id)}>
-                                                    <Edit className="mr-2 w-4 h-4" />
-                                                    Edit
-                                                </Button>
-                                                <Button variant="outline" size="sm" onClick={() => handleDeletePrompt(prompt.id)}>
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
+                                        <CardTitle className="flex items-center">
+                                            <FileText className="mr-2 w-5 h-5" />
+                                            {prompt.name || "Untitled Prompt"}
+                                        </CardTitle>
+                                        {prompt.description && <p className="mt-1 text-sm text-gray-600">{prompt.description}</p>}
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <Badge variant={prompt?.is_active ? "default" : "secondary"}>
+                                            {prompt?.is_active ? "Active" : "Inactive"}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </CardHeader>
+
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2">
+                                    {editingId === prompt.id ? (
+                                        <MarkdownEditor
+                                            value={prompt.content || ""}
+                                            onChange={(content) => {
+                                                setPrompts((prev) => prev.map((p) => (p && p.id === prompt.id ? { ...p, content } : p)));
+                                            }}
+                                            onSave={() => handlePromptSave(prompt.id, prompt.content || "")}
+                                            onCancel={() => setEditingId(null)}
+                                            title="Edit System Prompt"
+                                            description={`Editing: ${prompt.name}`}
+                                            isDirty={
+                                                (prompt.content || "") !== (prompts.find((p) => p && p.id === prompt.id)?.content || "")
+                                            }
+                                            isLoading={savingId === prompt.id}
+                                        />
+                                    ) : (
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="text-sm font-medium text-gray-900">Prompt Content</label>
+                                                <div className="flex items-center space-x-2">
+                                                    <Button variant="outline" size="sm" onClick={() => handleToggleActive(prompt.id)}>
+                                                        {prompt?.is_active ? "Deactivate" : "Activate"}
+                                                    </Button>
+                                                    <Button variant="outline" size="sm" onClick={() => setEditingId(prompt.id)}>
+                                                        <Edit className="mr-2 w-4 h-4" />
+                                                        Edit
+                                                    </Button>
+                                                    <Button variant="outline" size="sm" onClick={() => handleDeletePrompt(prompt.id)}>
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                            <div className="p-4 bg-gray-50 rounded-lg">
+                                                <pre className="overflow-y-auto max-h-64 font-mono text-sm text-gray-900 whitespace-pre-wrap">
+                                                    {prompt.content}
+                                                </pre>
                                             </div>
                                         </div>
-                                        <div className="p-4 bg-gray-50 rounded-lg">
-                                            <pre className="overflow-y-auto max-h-64 font-mono text-sm text-gray-900 whitespace-pre-wrap">
-                                                {prompt.content}
-                                            </pre>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                                    )}
+                                </div>
 
-                            {/* Metadata */}
-                            <div className="flex justify-between items-center pt-2 text-xs text-gray-500 border-t">
-                                <div>
-                                    <span>Created: {new Date(prompt.created_at).toLocaleDateString()}</span>
-                                    <span className="mx-2">•</span>
-                                    <span>Updated: {new Date(prompt.updated_at).toLocaleDateString()}</span>
+                                {/* Metadata */}
+                                <div className="flex justify-between items-center pt-2 text-xs text-gray-500 border-t">
+                                    <div>
+                                        <span>Created: {new Date(prompt.created_at).toLocaleDateString()}</span>
+                                        <span className="mx-2">•</span>
+                                        <span>Updated: {new Date(prompt.updated_at).toLocaleDateString()}</span>
+                                    </div>
+                                    <div>
+                                        <span>Length: {prompt.content ? prompt.content.length.toLocaleString() : 0} characters</span>
+                                        <span className="mx-2">•</span>
+                                        <span>Lines: {prompt.content ? prompt.content.split("\n").length : 0}</span>
+                                    </div>
                                 </div>
-                                <div>
-                                    <span>Length: {prompt.content ? prompt.content.length.toLocaleString() : 0} characters</span>
-                                    <span className="mx-2">•</span>
-                                    <span>Lines: {prompt.content ? prompt.content.split("\n").length : 0}</span>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                ))}
+                            </CardContent>
+                        </Card>
+                    ))}
             </div>
 
             {/* Empty State */}
