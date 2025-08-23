@@ -46,26 +46,14 @@ ${config.screenshots.length > 0 ? config.screenshots.map(s => `- ${s.filename}: 
 ${config.website.description || 'No description provided'}`;
         }
 
-        // Get agent config for comparison (with fallback)
-        let agentConfig = null;
-        try {
-            const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-            const agentConfigResponse = await fetch(`${baseUrl}/api/agent/config/${websiteSlug}`, {
-                signal: AbortSignal.timeout(5000) // 5 second timeout
-            });
-            if (agentConfigResponse.ok) {
-                agentConfig = await agentConfigResponse.json();
-            }
-        } catch (error) {
-            console.warn('Failed to fetch agent config, using built prompt:', error);
-            // Use the built prompt as fallback
-        }
+        // Use the built prompt directly (same logic as agent config endpoint)
+        // No need for circular fetch - this endpoint already builds the prompt correctly
 
         return NextResponse.json({
             website: config.website,
             screenshots: config.screenshots,
             system_prompt: config.system_prompt,
-            final_prompt: agentConfig?.system_prompt || finalPrompt
+            final_prompt: finalPrompt
         });
     } catch (error) {
         console.error('Error fetching verification data:', error);

@@ -34,10 +34,13 @@ export default function PromptsPage() {
     const [showUploadDialog, setShowUploadDialog] = useState(false);
     const [uploadedFile, setUploadedFile] = useState<File | null>(null);
     const [isCreating, setIsCreating] = useState(false);
+    const [savingId, setSavingId] = useState<string | null>(null);
 
     useEffect(() => {
         loadPrompts();
     }, [websiteSlug]);
+
+
 
     const loadPrompts = async () => {
         try {
@@ -150,27 +153,59 @@ Remember to reference the screenshots provided to help users visually navigate H
     };
 
     const handlePromptSave = async (id: string, content: string) => {
+        setSavingId(id);
         try {
             const response = await fetch(`/api/dashboard/websites/${websiteSlug}/prompts/${id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     content,
-                    name: prompts.find((p) => p.id === id)?.name,
-                    description: prompts.find((p) => p.id === id)?.description,
+                    name: prompts.find((p) => p && p.id === id)?.name,
+                    description: prompts.find((p) => p && p.id === id)?.description,
                 }),
             });
 
             if (response.ok) {
-                const data = await response.json();
-                setPrompts((prev) => prev.map((p) => (p.id === id ? data.prompt : p)));
+                // Try to get the updated prompt data
+                let updatedPrompt = null;
+                try {
+                    const data = await response.json();
+                    updatedPrompt = data.prompt;
+                } catch (parseError) {
+                    console.warn("Failed to parse save response, refetching prompt data");
+                }
+
+                // If we couldn't get the updated data from the response, refetch from API
+                if (!updatedPrompt) {
+                    try {
+                        const fetchResponse = await fetch(`/api/dashboard/websites/${websiteSlug}/prompts/${id}`);
+                        if (fetchResponse.ok) {
+                            const fetchData = await fetchResponse.json();
+                            updatedPrompt = fetchData;
+                        }
+                    } catch (fetchError) {
+                        console.warn("Failed to refetch prompt data");
+                    }
+                }
+
+                // Update the local state if we have the updated data
+                if (updatedPrompt) {
+                    setPrompts((prev) => prev.map((p) => (p && p.id === id ? updatedPrompt : p)));
+                }
+
+                // Show success message
+                alert("✅ Prompt saved successfully!");
             } else {
-                throw new Error("Failed to save prompt");
+                const errorText = await response.text();
+                throw new Error(`Save failed: ${errorText}`);
             }
 
             setEditingId(null);
         } catch (error) {
             console.error("Error saving prompt:", error);
+            alert(`❌ Failed to save prompt: ${error instanceof Error ? error.message : "Unknown error"}`);
+        } finally {
+            setSavingId(null);
         }
     };
 
@@ -185,24 +220,29 @@ Remember to reference the screenshots provided to help users visually navigate H
         try {
             // Read file content
             const content = await uploadedFile.text();
+            const promptName = uploadedFile.name.replace(/\.[^/.]+$/, "");
 
-            // Create new prompt
-            const newPrompt: SystemPrompt = {
-                id: Date.now().toString(),
-                name: uploadedFile.name.replace(/\.[^/.]+$/, ""),
-                description: `Uploaded from ${uploadedFile.name}`,
-                content: content,
-                s3_key: `agent-configs/${websiteSlug}/prompts/${uploadedFile.name}`,
-                is_active: false,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            };
+            // Create prompt via API
+            const response = await fetch(`/api/dashboard/websites/${websiteSlug}/prompts`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: promptName,
+                    description: `Uploaded from ${uploadedFile.name}`,
+                    content: content,
+                }),
+            });
 
-            setPrompts((prev) => [newPrompt, ...prev]);
-            setShowUploadDialog(false);
-            setUploadedFile(null);
+            if (response.ok) {
+                const createdPrompt = await response.json();
 
-            // In the future, this would upload to S3 and save to database
+                // Add the created prompt to the local state
+                setPrompts((prev) => [createdPrompt, ...prev]);
+                setShowUploadDialog(false);
+                setUploadedFile(null);
+            } else {
+                throw new Error("Failed to create prompt");
+            }
         } catch (error) {
             console.error("Error creating prompt:", error);
         } finally {
@@ -217,7 +257,7 @@ Remember to reference the screenshots provided to help users visually navigate H
             });
 
             if (response.ok) {
-                setPrompts((prev) => prev.filter((p) => p.id !== id));
+                setPrompts((prev) => prev.filter((p) => p && p.id !== id));
             } else {
                 throw new Error("Failed to delete prompt");
             }
@@ -228,7 +268,7 @@ Remember to reference the screenshots provided to help users visually navigate H
 
     const handleToggleActive = async (id: string) => {
         try {
-            const prompt = prompts.find((p) => p.id === id);
+            const prompt = prompts.find((p) => p && p.id === id);
             if (!prompt) return;
 
             const response = await fetch(`/api/dashboard/websites/${websiteSlug}/prompts/${id}`, {
@@ -236,15 +276,15 @@ Remember to reference the screenshots provided to help users visually navigate H
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     is_active: !prompt.is_active,
-                    name: prompt.name,
-                    description: prompt.description,
-                    content: prompt.content,
+                    name: prompt.name || "Untitled Prompt",
+                    description: prompt.description || "",
+                    content: prompt.content || "",
                 }),
             });
 
             if (response.ok) {
                 const data = await response.json();
-                setPrompts((prev) => prev.map((p) => (p.id === id ? data.prompt : p)));
+                setPrompts((prev) => prev.map((p) => (p && p.id === id ? data.prompt : p)));
             } else {
                 throw new Error("Failed to update prompt status");
             }
@@ -274,6 +314,10 @@ Remember to reference the screenshots provided to help users visually navigate H
                         <p className="mt-2 text-gray-700">Manage system prompts and instructions for {websiteSlug}</p>
                     </div>
                     <div className="flex space-x-3">
+                        <Button variant="outline" onClick={loadPrompts} disabled={loading}>
+                            <History className="mr-2 w-4 h-4" />
+                            Refresh
+                        </Button>
                         <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
                             <DialogTrigger asChild>
                                 <Button variant="outline">
@@ -323,7 +367,7 @@ Remember to reference the screenshots provided to help users visually navigate H
                 <StatsCard title="Total Prompts" value={prompts.length} description="System prompt files" icon={FileText} />
                 <StatsCard
                     title="Active Prompt"
-                    value={prompts.filter((p) => p.is_active).length}
+                    value={prompts.filter((p) => p && p.is_active).length}
                     description="Currently in use"
                     icon={Eye}
                 />
@@ -332,20 +376,20 @@ Remember to reference the screenshots provided to help users visually navigate H
 
             {/* Prompts List */}
             <div className="space-y-6">
-                {prompts.map((prompt) => (
+                {prompts.filter(prompt => prompt && prompt.id).map((prompt) => (
                     <Card key={prompt.id} className="overflow-hidden">
                         <CardHeader>
                             <div className="flex justify-between items-center">
                                 <div>
                                     <CardTitle className="flex items-center">
                                         <FileText className="mr-2 w-5 h-5" />
-                                        {prompt.name}
+                                        {prompt.name || "Untitled Prompt"}
                                     </CardTitle>
                                     {prompt.description && <p className="mt-1 text-sm text-gray-600">{prompt.description}</p>}
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                    <Badge variant={prompt.is_active ? "default" : "secondary"}>
-                                        {prompt.is_active ? "Active" : "Inactive"}
+                                    <Badge variant={prompt?.is_active ? "default" : "secondary"}>
+                                        {prompt?.is_active ? "Active" : "Inactive"}
                                     </Badge>
                                 </div>
                             </div>
@@ -355,15 +399,16 @@ Remember to reference the screenshots provided to help users visually navigate H
                             <div className="space-y-2">
                                 {editingId === prompt.id ? (
                                     <MarkdownEditor
-                                        value={prompt.content}
+                                        value={prompt.content || ""}
                                         onChange={(content) => {
-                                            setPrompts((prev) => prev.map((p) => (p.id === prompt.id ? { ...p, content } : p)));
+                                            setPrompts((prev) => prev.map((p) => (p && p.id === prompt.id ? { ...p, content } : p)));
                                         }}
-                                        onSave={() => handlePromptSave(prompt.id, prompt.content)}
+                                        onSave={() => handlePromptSave(prompt.id, prompt.content || "")}
                                         onCancel={() => setEditingId(null)}
                                         title="Edit System Prompt"
                                         description={`Editing: ${prompt.name}`}
-                                        isDirty={prompt.content !== prompts.find((p) => p.id === prompt.id)?.content}
+                                        isDirty={(prompt.content || "") !== (prompts.find((p) => p && p.id === prompt.id)?.content || "")}
+                                        isLoading={savingId === prompt.id}
                                     />
                                 ) : (
                                     <div>
@@ -371,7 +416,7 @@ Remember to reference the screenshots provided to help users visually navigate H
                                             <label className="text-sm font-medium text-gray-900">Prompt Content</label>
                                             <div className="flex items-center space-x-2">
                                                 <Button variant="outline" size="sm" onClick={() => handleToggleActive(prompt.id)}>
-                                                    {prompt.is_active ? "Deactivate" : "Activate"}
+                                                    {prompt?.is_active ? "Deactivate" : "Activate"}
                                                 </Button>
                                                 <Button variant="outline" size="sm" onClick={() => setEditingId(prompt.id)}>
                                                     <Edit className="mr-2 w-4 h-4" />
@@ -399,9 +444,9 @@ Remember to reference the screenshots provided to help users visually navigate H
                                     <span>Updated: {new Date(prompt.updated_at).toLocaleDateString()}</span>
                                 </div>
                                 <div>
-                                    <span>Length: {prompt.content.length.toLocaleString()} characters</span>
+                                    <span>Length: {prompt.content ? prompt.content.length.toLocaleString() : 0} characters</span>
                                     <span className="mx-2">•</span>
-                                    <span>Lines: {prompt.content.split("\n").length}</span>
+                                    <span>Lines: {prompt.content ? prompt.content.split("\n").length : 0}</span>
                                 </div>
                             </div>
                         </CardContent>

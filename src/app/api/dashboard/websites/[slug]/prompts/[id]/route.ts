@@ -158,12 +158,37 @@ export async function PUT(
             }
         }
 
+        // Get the updated content from S3 to return it
+        let updatedContent = content;
+        if (content) {
+            try {
+                const getCommand = new GetObjectCommand({
+                    Bucket: updatedPrompt.s3_bucket,
+                    Key: updatedPrompt.s3_key,
+                });
+                const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
+                const response = await fetch(signedUrl);
+                if (response.ok) {
+                    updatedContent = await response.text();
+                }
+            } catch (error) {
+                console.error('Error fetching updated content from S3:', error);
+            }
+        }
+
         return NextResponse.json({
-            id: updatedPrompt.id,
-            name: updatedPrompt.name,
-            description: updatedPrompt.description,
-            is_active: updatedPrompt.is_active,
-            updated_at: updatedPrompt.updated_at.toISOString(),
+            prompt: {
+                id: updatedPrompt.id,
+                name: updatedPrompt.name,
+                description: updatedPrompt.description,
+                content: updatedContent,
+                is_active: updatedPrompt.is_active,
+                updated_at: updatedPrompt.updated_at.toISOString(),
+                created_at: updatedPrompt.created_at.toISOString(),
+                s3_key: updatedPrompt.s3_key,
+                s3_bucket: updatedPrompt.s3_bucket,
+                version: updatedPrompt.version,
+            }
         });
     } catch (error) {
         console.error('Error updating prompt:', error);

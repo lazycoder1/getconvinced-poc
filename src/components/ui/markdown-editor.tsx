@@ -131,6 +131,7 @@ export function MarkdownEditor({
                                 placeholder={placeholder}
                                 className="min-h-64 font-mono text-sm resize-none"
                                 style={{ fontFamily: 'Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}
+                                autoFocus
                             />
                         </div>
 

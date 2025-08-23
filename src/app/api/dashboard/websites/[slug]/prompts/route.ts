@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/database';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const s3Client = new S3Client({
     region: process.env.AWS_REGION || 'us-east-1',
@@ -34,8 +34,7 @@ export async function GET(
         // Get prompts for this website
         const prompts = await prisma.systemPrompt.findMany({
             where: {
-                website_id: website.id,
-                is_active: true
+                website_id: website.id
             },
             orderBy: {
                 created_at: 'desc'
@@ -60,16 +59,19 @@ export async function GET(
                     const response = await fetch(signedUrl);
                     if (response.ok) {
                         content = await response.text();
+                        console.log(`Content fetched from S3 for prompt ${prompt.id}: ${content.length} characters`);
+                    } else {
+                        console.error(`Failed to fetch content from S3 for prompt ${prompt.id}: ${response.status}`);
                     }
                 } catch (error) {
-                    console.error('Error fetching prompt content from S3:', error);
+                    console.error(`Error fetching prompt content from S3 for prompt ${prompt.id}:`, error);
                 }
 
                 return {
                     id: prompt.id,
                     name: prompt.name,
                     description: prompt.description,
-                    content,
+                    content: content || `# ${prompt.name}\n\nDefault content for ${prompt.name}. Please edit this prompt to customize it for your needs.`,
                     s3_key: prompt.s3_key,
                     s3_bucket: prompt.s3_bucket,
                     is_active: prompt.is_active,
@@ -112,9 +114,27 @@ export async function POST(
             );
         }
 
-        // Upload content to S3 (for now, we'll store it in database, but in production should be S3)
+        // Upload content to S3
         const s3Key = `agent-configs/${websiteSlug}/prompts/${Date.now()}-${name.toLowerCase().replace(/\s+/g, '-')}.md`;
         const s3Bucket = process.env.AWS_S3_BUCKET_NAME || 'hubspot-voice-agent-bucket';
+
+        // Upload content to S3
+        console.log('Uploading to S3:', { s3Bucket, s3Key, contentLength: content.length });
+
+        const uploadCommand = new PutObjectCommand({
+            Bucket: s3Bucket,
+            Key: s3Key,
+            Body: content,
+            ContentType: 'text/markdown',
+        });
+
+        try {
+            await s3Client.send(uploadCommand);
+            console.log('S3 upload successful');
+        } catch (s3Error) {
+            console.error('S3 upload failed:', s3Error);
+            throw s3Error;
+        }
 
         // Create the prompt in database
         const prompt = await prisma.systemPrompt.create({
@@ -127,9 +147,6 @@ export async function POST(
                 is_active: false, // New prompts start as inactive
             }
         });
-
-        // In a real implementation, you'd upload the content to S3 here
-        // For now, we'll just create the database record
 
         return NextResponse.json(prompt, { status: 201 });
     } catch (error) {
