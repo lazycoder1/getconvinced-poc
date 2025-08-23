@@ -90,6 +90,20 @@ export async function POST(
     { params }: { params: Promise<{ slug: string }> }
 ) {
     try {
+        // Early config validation for clearer errors
+        const hasCreds = !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+        const bucket = process.env.AWS_S3_BUCKET || 'get-convinced';
+        if (!hasCreds || !bucket) {
+            console.error('AWS configuration missing', {
+                hasCreds,
+                bucketPresent: !!bucket,
+                region: process.env.AWS_REGION,
+            });
+            return NextResponse.json(
+                { error: 'Server misconfigured for uploads', details: { hasCreds, bucket: !!bucket } },
+                { status: 500 }
+            );
+        }
         const resolvedParams = await params;
         const websiteSlug = resolvedParams.slug;
 
@@ -133,7 +147,7 @@ export async function POST(
             // Upload to S3
             const fileBuffer = Buffer.from(await file.arrayBuffer());
             const uploadCommand = new PutObjectCommand({
-                Bucket: process.env.AWS_S3_BUCKET || 'get-convinced',
+                Bucket: bucket,
                 Key: s3Key,
                 Body: fileBuffer,
                 ContentType: file.type,
@@ -160,7 +174,7 @@ export async function POST(
                     website_id: website.id,
                     filename: filename,
                     s3_key: s3Key,
-                    s3_bucket: process.env.AWS_S3_BUCKET || 'get-convinced',
+                    s3_bucket: bucket,
                     file_size_bytes: file.size,
                     description: file.name,
                     sort_order: nextSortOrder

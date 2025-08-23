@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/database';
+import { deleteFromS3 } from '@/lib/s3';
 
 export async function PUT(
     request: NextRequest,
@@ -99,7 +100,7 @@ export async function DELETE(
         const websiteSlug = resolvedParams.slug;
         const screenshotId = resolvedParams.id;
 
-        // First verify the screenshot belongs to the website
+        // Verify the website exists
         const website = await prisma.website.findUnique({
             where: { slug: websiteSlug }
         });
@@ -111,6 +112,7 @@ export async function DELETE(
             );
         }
 
+        // Load screenshot record
         const screenshot = await prisma.screenshot.findFirst({
             where: {
                 id: screenshotId,
@@ -125,16 +127,23 @@ export async function DELETE(
             );
         }
 
-        // Soft delete by setting is_active to false
-        await prisma.screenshot.update({
-            where: { id: screenshotId },
-            data: {
-                is_active: false,
-                updated_at: new Date()
-            }
+        // Delete from S3 first to avoid orphaned DB records if S3 fails
+        try {
+            await deleteFromS3(screenshot.s3_key);
+        } catch (s3Error) {
+            console.error('S3 delete failed for key:', screenshot.s3_key, s3Error);
+            return NextResponse.json(
+                { error: 'Failed to delete screenshot from storage' },
+                { status: 500 }
+            );
+        }
+
+        // Hard delete from DB
+        await prisma.screenshot.delete({
+            where: { id: screenshotId }
         });
 
-        return NextResponse.json({ message: 'Screenshot deleted successfully' });
+        return NextResponse.json({ message: 'Screenshot deleted from S3 and database' });
     } catch (error) {
         console.error('Error deleting screenshot:', error);
         return NextResponse.json(

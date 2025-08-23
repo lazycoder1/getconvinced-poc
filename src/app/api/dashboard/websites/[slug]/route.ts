@@ -18,14 +18,6 @@ export async function GET(
 
         const website = await prisma.website.findUnique({
             where: { slug: websiteSlug },
-            include: {
-                _count: {
-                    select: {
-                        screenshots: true,
-                        system_prompts: true
-                    }
-                }
-            }
         });
 
         if (!website) {
@@ -35,13 +27,19 @@ export async function GET(
             );
         }
 
+        // Counts with filtering
+        const [screenshotCount, promptCount] = await Promise.all([
+            prisma.screenshot.count({ where: { website_id: website.id, is_active: true } }),
+            prisma.systemPrompt.count({ where: { website_id: website.id, is_active: true } }),
+        ]);
+
         const transformedWebsite = {
             id: website.id,
             name: website.name,
             slug: website.slug,
             description: website.description,
-            screenshotCount: website._count.screenshots,
-            promptCount: website._count.system_prompts,
+            screenshotCount,
+            promptCount,
             lastUpdated: website.updated_at.toISOString(),
             status: website.is_active ? 'active' : 'inactive',
             created_at: website.created_at.toISOString()

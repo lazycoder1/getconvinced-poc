@@ -4,31 +4,36 @@ import { prisma } from '@/lib/database';
 export async function GET(request: NextRequest) {
     try {
         const websites = await prisma.website.findMany({
-            include: {
-                _count: {
-                    select: {
-                        screenshots: true,
-                        system_prompts: true
-                    }
-                }
-            },
             orderBy: {
                 created_at: 'desc'
             }
         });
 
-        // Transform the data to match the expected format
-        const transformedWebsites = websites.map(website => ({
-            id: website.id,
-            name: website.name,
-            slug: website.slug,
-            description: website.description,
-            screenshotCount: website._count.screenshots,
-            promptCount: website._count.system_prompts,
-            lastUpdated: website.updated_at.toISOString(),
-            status: website.is_active ? 'active' : 'inactive',
-            created_at: website.created_at.toISOString()
-        }));
+        // Compute counts with proper filtering (only active records)
+        const transformedWebsites = await Promise.all(
+            websites.map(async (website) => {
+                const [screenshotCount, promptCount] = await Promise.all([
+                    prisma.screenshot.count({
+                        where: { website_id: website.id, is_active: true },
+                    }),
+                    prisma.systemPrompt.count({
+                        where: { website_id: website.id, is_active: true },
+                    }),
+                ]);
+
+                return {
+                    id: website.id,
+                    name: website.name,
+                    slug: website.slug,
+                    description: website.description,
+                    screenshotCount,
+                    promptCount,
+                    lastUpdated: website.updated_at.toISOString(),
+                    status: website.is_active ? 'active' : 'inactive',
+                    created_at: website.created_at.toISOString(),
+                };
+            })
+        );
 
         return NextResponse.json(transformedWebsites);
     } catch (error) {

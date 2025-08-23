@@ -1,3 +1,9 @@
+/* Ensure readable text on light buttons (including in dark mode) */
+button[class*="bg-white"], button[class*="bg-white"] *,
+button[class*="bg-gray-50"], button[class*="bg-gray-50"] *,
+button[class*="bg-gray-100"], button[class*="bg-gray-100"] * {
+  color: #111827 !important; /* gray-900 */
+}
 @import "tailwindcss";
 
 :root {
@@ -107,38 +113,25 @@ h1, h2, h3, h4, h5, h6,
   color: #000000 !important;
 }
 
-/* 7. Button text fixes - white text on dark buttons */
-button,
-.btn,
-button[class*="bg-black"],
-button[class*="bg-gray-900"],
-button[class*="bg-gray-800"],
-button[class*="bg-blue-600"],
-button[class*="bg-blue-700"],
-button[class*="bg-indigo-600"],
-button[class*="bg-indigo-700"],
-button[class*="bg-purple-600"],
-button[class*="bg-purple-700"],
-button[class*="bg-green-600"],
-button[class*="bg-green-700"],
-button[class*="bg-red-600"],
-button[class*="bg-red-700"],
-input[type="submit"],
-input[type="button"],
-.button,
-[type="submit"],
-[type="button"] {
+/* 7. Button text fixes - ensure white text on clearly dark buttons (and children) */
+button[class*="bg-black"], button[class*="bg-black"] *,
+button[class*="bg-gray-900"], button[class*="bg-gray-900"] *,
+button[class*="bg-gray-800"], button[class*="bg-gray-800"] *,
+button[class*="bg-blue-600"], button[class*="bg-blue-600"] *,
+button[class*="bg-blue-700"], button[class*="bg-blue-700"] *,
+button[class*="bg-indigo-600"], button[class*="bg-indigo-600"] *,
+button[class*="bg-indigo-700"], button[class*="bg-indigo-700"] *,
+button[class*="bg-purple-600"], button[class*="bg-purple-600"] *,
+button[class*="bg-purple-700"], button[class*="bg-purple-700"] *,
+button[class*="bg-green-600"], button[class*="bg-green-600"] *,
+button[class*="bg-green-700"], button[class*="bg-green-700"] *,
+button[class*="bg-red-600"], button[class*="bg-red-600"] *,
+button[class*="bg-red-700"], button[class*="bg-red-700"] * {
   color: #ffffff !important;
   font-weight: 500 !important;
 }
 
-/* Specific button classes from shadcn/ui */
-.btn-primary,
-.btn-secondary,
-.btn-outline,
-.btn-ghost {
-  color: #ffffff !important;
-}
+/* Remove overly broad button text overrides; rely on component styles */
 
 /* 9. Input fields and search bar fixes */
 input,
@@ -193,7 +186,4 @@ input[type="search"]::placeholder {
   padding: 4px !important;
 }
 
-/* 8. Emergency fallback - make everything black except icons and buttons */
-*:not(svg):not(path):not(circle):not(rect):not(line):not(polygon):not(polyline):not(ellipse):not(g):not(use):not(button):not(.btn):not(.button) {
-  color: #000000 !important;
-}
+/* 8. Remove overly broad fallback that affected button children */
