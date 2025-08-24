@@ -223,14 +223,14 @@ function AgentDemoPageContent() {
                 {/* Content Area */}
                 <div className="flex flex-col flex-1 p-6 space-y-6">
                     {/* Screenshot Area - Larger */}
-                    <div className="max-h-[600px]">
+                    <div className="h-[600px]">
                         {activeScreenshot ? (
-                            <div className="overflow-hidden h-full bg-white rounded-lg border border-gray-200 shadow-sm">
-                                {/* Screenshot Image - Full Area */}
+                            <div className="overflow-hidden h-full bg-white rounded-lg border border-gray-200 shadow-sm flex items-center justify-center">
+                                {/* Screenshot Image - Contain within frame without cropping */}
                                 <img
                                     src={activeScreenshot.s3_url}
                                     alt={activeScreenshot.filename}
-                                    className="object-cover w-full h-full rounded-lg"
+                                    className="object-contain w-full h-full rounded-lg"
                                 />
                             </div>
                         ) : (
