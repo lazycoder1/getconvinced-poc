@@ -47,6 +47,15 @@ export async function POST(
             return NextResponse.json({ error: 'No files provided' }, { status: 400 });
         }
 
+        const sanitizeHeaderValue = (value: string, fallback: string = ""): string => {
+            try {
+                const str = (value ?? fallback).toString();
+                return str.replace(/[^\x20-\x7E]/g, "").slice(0, 200);
+            } catch {
+                return fallback;
+            }
+        };
+
         const uploads = await Promise.all(files.map(async (f) => {
             const timestamp = Date.now();
             const randomId = Math.random().toString(36).substring(2, 8);
@@ -59,7 +68,7 @@ export async function POST(
                 Key: key,
                 ContentType: f.type || 'application/octet-stream',
                 Metadata: {
-                    originalName: f.name || filename,
+                    originalName: sanitizeHeaderValue(f.name || filename, filename),
                     uploadedBy: 'dashboard-client'
                 }
             });

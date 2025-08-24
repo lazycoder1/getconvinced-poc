@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Image, Upload, Save, Edit, Trash2, Eye, Plus, Download, Star } from "lucide-react";
+import { Image, Upload, Save, Edit, Trash2, Eye, Plus, Download, Star, Wand2 } from "lucide-react";
 
 interface Screenshot {
     id: string;
@@ -31,6 +31,8 @@ export default function ScreenshotsPage() {
     const [loading, setLoading] = useState(true);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [uploadLoading, setUploadLoading] = useState(false);
+    const [annotating, setAnnotating] = useState<Record<string, boolean>>({});
+    const [reAnnotateAll, setReAnnotateAll] = useState(false);
 
     useEffect(() => {
         loadScreenshots();
@@ -203,6 +205,28 @@ export default function ScreenshotsPage() {
         }
     };
 
+    const handleAutoAnnotate = async (id: string) => {
+        const defaultPrompt =
+            "These screenshots will be used for demo'ing the hubspot website by a pre-sales agent. Describe the page in a fashion that the agent can understand and use it appropriately. Please stick to 3 lines max.";
+
+        setAnnotating((prev) => ({ ...prev, [id]: true }));
+        try {
+            const response = await fetch(`/api/dashboard/websites/${websiteSlug}/screenshots/${id}/annotate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt: defaultPrompt }),
+            });
+
+            if (!response.ok) throw new Error("Failed to annotate screenshot");
+            const result = await response.json();
+            setScreenshots((prev) => prev.map((s) => (s.id === id ? { ...s, annotation: result.annotation } : s)));
+        } catch (error) {
+            console.error("Error auto-annotating screenshot:", error);
+        } finally {
+            setAnnotating((prev) => ({ ...prev, [id]: false }));
+        }
+    };
+
     if (loading) {
         return (
             <div className="p-8">
@@ -223,11 +247,35 @@ export default function ScreenshotsPage() {
                         <h1 className="text-3xl font-bold text-gray-900">Screenshots</h1>
                         <p className="mt-2 text-gray-600">Manage screenshots and annotations for {websiteSlug}</p>
                     </div>
-                    <div className="flex space-x-3">
+                    <div className="flex space-x-3 items-center">
                         <Button variant="outline" onClick={handleExportAll}>
                             <Download className="h-4 w-4 mr-2" />
                             Export All
                         </Button>
+                        {/* Bulk annotate only missing annotations */}
+                        <Button
+                            onClick={async () => {
+                                const toAnnotate = reAnnotateAll ? screenshots : screenshots.filter((s) => !s.annotation);
+                                for (const s of toAnnotate) {
+                                    await handleAutoAnnotate(s.id);
+                                }
+                            }}
+                            disabled={(reAnnotateAll ? screenshots.length : screenshots.filter((s) => !s.annotation).length) === 0}
+                        >
+                            <Wand2 className="h-4 w-4 mr-2" />
+                            {reAnnotateAll
+                                ? `Annotate All (${screenshots.length})`
+                                : `Annotate Missing (${screenshots.filter((s) => !s.annotation).length})`}
+                        </Button>
+                        <label className="flex items-center space-x-2 text-sm text-gray-700">
+                            <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={reAnnotateAll}
+                                onChange={(e) => setReAnnotateAll(e.target.checked)}
+                            />
+                            <span>Re-annotate existing</span>
+                        </label>
                         <div className="relative">
                             <input
                                 type="file"
@@ -310,13 +358,18 @@ export default function ScreenshotsPage() {
 
                         <CardContent className="space-y-4">
                             {/* Image Preview */}
-                            <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                            <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden">
                                 <img
                                     src={screenshot.s3_url}
                                     alt={screenshot.filename}
                                     className="w-full h-full object-cover"
                                     loading="lazy"
                                 />
+                                {annotating[screenshot.id] && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-black/40">
+                                        <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                                    </div>
+                                )}
                             </div>
 
                             {/* Description */}
@@ -338,6 +391,19 @@ export default function ScreenshotsPage() {
                                                 : "Double-click to edit"}
                                         </span>
                                         <div className="flex items-center space-x-1">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => handleAutoAnnotate(screenshot.id)}
+                                                disabled={!!annotating[screenshot.id]}
+                                                title="Auto-annotate with AI"
+                                            >
+                                                {annotating[screenshot.id] ? (
+                                                    <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                                                ) : (
+                                                    <Wand2 className="h-4 w-4" />
+                                                )}
+                                            </Button>
                                             <Button
                                                 size="sm"
                                                 variant={screenshot.is_default ? "default" : "outline"}

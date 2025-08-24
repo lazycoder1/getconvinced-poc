@@ -90,6 +90,16 @@ export async function POST(
     { params }: { params: Promise<{ slug: string }> }
 ) {
     try {
+        // Helper to sanitize metadata values to printable ASCII (HTTP header safe)
+        const sanitizeHeaderValue = (value: string, fallback: string = ""): string => {
+            try {
+                const str = (value ?? fallback).toString();
+                // Keep printable ASCII 0x20-0x7E; drop others and trim length
+                return str.replace(/[^\x20-\x7E]/g, "").slice(0, 200);
+            } catch {
+                return fallback;
+            }
+        };
         // Early config validation for clearer errors
         const hasCreds = !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
         const bucket = process.env.AWS_S3_BUCKET || 'get-convinced';
@@ -152,7 +162,7 @@ export async function POST(
                 Body: fileBuffer,
                 ContentType: file.type,
                 Metadata: {
-                    originalName: file.name,
+                    originalName: sanitizeHeaderValue(file.name, filename),
                     uploadedBy: 'dashboard'
                 }
             });
