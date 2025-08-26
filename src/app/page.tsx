@@ -283,13 +283,6 @@ export default function WelcomePage() {
             </main>
 
             {/* Footer */}
-            <footer className="mt-20 bg-white border-t border-gray-200">
-                <div className="px-4 py-8 mx-auto max-w-7xl sm:px-6 lg:px-8">
-                    <div className="text-center text-gray-600">
-                        <p>&copy; 2025 Get Convinced. Experience the future of AI assistance.</p>
-                    </div>
-                </div>
-            </footer>
         </div>
     );
 }
