@@ -48,7 +48,7 @@ function AgentDemoPageContent() {
     const [playwrightStatus, setPlaywrightStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
     const [debugMessages, setDebugMessages] = useState<Array<{ source: string; message: string; timestamp: Date }>>([]);
     const [activeScreenshot, setActiveScreenshot] = useState<Screenshot | null>(null);
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
     useEffect(() => {
         const loadConfiguration = async () => {
