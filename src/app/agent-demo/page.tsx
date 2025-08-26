@@ -211,11 +211,11 @@ function AgentDemoPageContent() {
                             <p className="text-sm text-gray-600">AI-powered visual guidance</p>
                         </div>
                         <a
-                            href="/dashboard"
+                            href="/"
                             className="flex items-center px-3 py-2 text-white bg-gray-600 rounded-lg transition-colors hover:bg-gray-700"
                         >
                             <Home className="mr-2 w-4 h-4" />
-                            Dashboard
+                            Home
                         </a>
                     </div>
                 </div>

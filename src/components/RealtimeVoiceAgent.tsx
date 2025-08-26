@@ -372,7 +372,7 @@ Always be helpful, patient, and professional. When explaining features, use clea
                     <div className="flex items-center space-x-3">
                         <div className="flex items-center space-x-2">
                             <Mic className="w-5 h-5 text-blue-600" />
-                            <h2 className="text-lg font-semibold text-gray-900">OpenAI Realtime Voice</h2>
+                            <h2 className="text-lg font-semibold text-gray-900">Realtime Voice</h2>
                         </div>
                         <div
                             className={`w-2 h-2 rounded-full ${
@@ -450,9 +450,9 @@ Always be helpful, patient, and professional. When explaining features, use clea
                     {isConnected && (
                         <div className="p-3 w-full bg-green-50 rounded-lg border border-green-200">
                             <p className="text-sm text-green-800">
-                                🎤 <strong>Voice agent is listening!</strong>
+                                🎤 <strong>Voice agent is listening.</strong>
                                 <br />
-                                Try saying: "I'm interested in HubSpot for my sales team" or "Show me how HubSpot CRM works"
+                                Say "hello" to begin, then ask a question or request a demo.
                             </p>
                         </div>
                     )}
