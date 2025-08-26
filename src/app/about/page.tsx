@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Linkedin, Mail } from "lucide-react";
+import { ArrowRight, Linkedin, Mail, CheckCircle2, Target } from "lucide-react";
 import Header from "@/components/Header";
 
 export const metadata = {
@@ -22,22 +22,51 @@ export default function AboutPage() {
 
                 <section className="grid grid-cols-1 gap-8 mt-16 md:grid-cols-2">
                     {/* Cofounder 1 */}
-                    <div className="p-6 bg-white rounded-2xl border border-gray-200 shadow-sm">
+                    <div className="flex flex-col p-6 h-full bg-white rounded-2xl border border-gray-200 shadow-sm">
                         <div className="flex gap-4 items-start">
                             <img
                                 src="/profile/gautam.png"
                                 alt="Gautam G Sabhahit"
-                                className="w-14 h-14 rounded-full object-cover border border-gray-200"
+                                className="object-cover w-14 h-14 rounded-full border border-gray-200"
                             />
                             <div>
                                 <h3 className="text-xl font-semibold text-gray-900">Gautam G Sabhahit</h3>
                                 <p className="text-gray-600">Co-founder</p>
                             </div>
                         </div>
-                        <p className="mt-4 text-gray-700">
-                            Focused on customer outcomes, sales workflows, and turning complex capability into clear, credible narratives.
-                        </p>
-                        <div className="flex gap-4 items-center mt-4">
+                        {/* Background */}
+                        <div className="mt-4">
+                            <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">Background</h4>
+                            <ul className="space-y-2 text-sm text-gray-700">
+                                <li className="flex gap-2 items-start">
+                                    <CheckCircle2 className="mt-0.5 w-4 h-4 text-blue-600" />{" "}
+                                    <span>Ex-FAANG + Ex-Founder - Brings Engineering Acumen</span>
+                                </li>
+                                <li className="flex gap-2 items-start">
+                                    <CheckCircle2 className="mt-0.5 w-4 h-4 text-blue-600" />{" "}
+                                    <span>
+                                        Created a developer focussed web3 data product which was used by top tier talent in the space.
+                                        Achieved consistent high usage metrics across the board. Won multiple equity free grants as a
+                                        recognition to our contribution to the adoption of Account Abstraction Tech Stacks in Web3. Scaled
+                                        the product to about ~$400k in revenues and grants.
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+                        {/* Responsibilities */}
+                        <div className="mt-4">
+                            <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">Responsibilities</h4>
+                            <ul className="space-y-2 text-sm text-gray-700">
+                                <li className="flex gap-2 items-start">
+                                    <Target className="mt-0.5 w-4 h-4 text-purple-600" />{" "}
+                                    <span>
+                                        Focused on product architecture, AI agents, and fast, reliable demo experiences that work out of the
+                                        box.
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+                        <div className="flex gap-4 items-center pt-4 mt-auto border-t border-gray-100">
                             <Link
                                 href="https://linkedin.com/in/gautam-sabhahit-8a7835100/"
                                 className="inline-flex gap-2 items-center text-blue-600 hover:underline"
@@ -51,22 +80,52 @@ export default function AboutPage() {
                     </div>
 
                     {/* Cofounder 2 */}
-                    <div className="p-6 bg-white rounded-2xl border border-gray-200 shadow-sm">
+                    <div className="flex flex-col p-6 h-full bg-white rounded-2xl border border-gray-200 shadow-sm">
                         <div className="flex gap-4 items-start">
                             <img
                                 src="/profile/vignesh.png"
                                 alt="Vignesh G Sabhahit"
-                                className="w-14 h-14 rounded-full object-cover border border-gray-200"
+                                className="object-cover w-14 h-14 rounded-full border border-gray-200"
                             />
                             <div>
                                 <h3 className="text-xl font-semibold text-gray-900">Vignesh G Sabhahit</h3>
                                 <p className="text-gray-600">Co-founder</p>
                             </div>
                         </div>
-                        <p className="mt-4 text-gray-700">
-                            Focused on product architecture, AI agents, and fast, reliable demo experiences that work out of the box.
-                        </p>
-                        <div className="flex gap-4 items-center mt-4">
+                        {/* Background */}
+                        <div className="mt-4">
+                            <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">Background</h4>
+                            <ul className="space-y-2 text-sm text-gray-700">
+                                <li className="flex gap-2 items-start">
+                                    <CheckCircle2 className="mt-0.5 w-4 h-4 text-blue-600" />{" "}
+                                    <span>Ex-Investment Banking - Brings Business Acumen</span>
+                                </li>
+                                <li className="flex gap-2 items-start">
+                                    <CheckCircle2 className="mt-0.5 w-4 h-4 text-blue-600" />{" "}
+                                    <span>
+                                        Successfully raised $35mn from well known VCs across 8 transaction for 6 companies operating in the
+                                        B2B SaaS, Edtech, AyurvedaTech & the Consumer spaces.
+                                        <br />
+                                        <br />
+                                        <br />
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+                        {/* Responsibilities */}
+                        <div className="mt-4">
+                            <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">Responsibilities</h4>
+                            <ul className="space-y-2 text-sm text-gray-700">
+                                <li className="flex gap-2 items-start">
+                                    <Target className="mt-0.5 w-4 h-4 text-purple-600" />{" "}
+                                    <span>
+                                        Focused on customer outcomes, sales workflows, and turning complex capability into clear, credible
+                                        narratives.
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+                        <div className="flex gap-4 items-center pt-4 mt-auto border-t border-gray-100">
                             <Link
                                 href="https://linkedin.com/in/vignesh-sabhahit-4a637452"
                                 className="inline-flex gap-2 items-center text-blue-600 hover:underline"
