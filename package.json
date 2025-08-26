@@ -34,6 +34,8 @@
         "next": "15.4.3",
         "openai": "^5.11.0",
         "playwright": "^1.49.1",
+        "posthog-js": "^1.260.3",
+        "posthog-node": "^5.8.0",
         "prisma": "^6.14.0",
         "react": "19.1.0",
         "react-dom": "19.1.0",
