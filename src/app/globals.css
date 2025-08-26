@@ -186,4 +186,8 @@ input[type="search"]::placeholder {
   padding: 4px !important;
 }
 
-/* 8. Remove overly broad fallback that affected button children */
+/* Ensure icons inside light buttons are dark by default */
+.debug-panel button svg {
+  color: #111827 !important; /* gray-900 */
+  stroke: currentColor !important;
+}

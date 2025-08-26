@@ -265,7 +265,7 @@ function AgentDemoPageContent() {
                     </div>
 
                     {/* Feedback box */}
-                    <div className="max-w-xl mx-auto w-full">
+                    <div className="mx-auto w-full max-w-xl">
                         <form
                             className="space-y-2"
                             onSubmit={async (e) => {
@@ -296,10 +296,10 @@ function AgentDemoPageContent() {
                                 name="feedback"
                                 rows={3}
                                 placeholder="Share your thoughts about this concept demo..."
-                                className="block w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="block p-2 w-full text-sm rounded-md border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <div className="flex justify-end">
-                                <button type="submit" className="px-4 py-2 text-white bg-blue-600 rounded-md text-sm hover:bg-blue-700">
+                                <button type="submit" className="px-4 py-2 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700">
                                     Submit feedback
                                 </button>
                             </div>
@@ -309,7 +309,11 @@ function AgentDemoPageContent() {
             </div>
 
             {/* Collapsible Debug Panel */}
-            <div className={`bg-white border-l border-gray-200 transition-all duration-300 ${sidebarCollapsed ? "w-12" : "w-80"}`}>
+            <div
+                className={`debug-panel relative z-10 bg-white border-l border-gray-200 transition-all duration-300 ${
+                    sidebarCollapsed ? "w-12" : "w-80"
+                }`}
+            >
                 {/* Sidebar Header */}
                 <div className="p-4 border-b border-gray-200">
                     {sidebarCollapsed ? (
@@ -328,9 +332,10 @@ function AgentDemoPageContent() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setSidebarCollapsed(true)}
-                                className="text-gray-800 border border-gray-300 hover:bg-red-50 hover:text-red-600"
+                                aria-label="Close debug panel"
+                                className="text-gray-900 bg-gray-100 border border-gray-300 group hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-300"
                             >
-                                <X className="w-4 h-4" />
+                                <X className="w-4 h-4 !text-gray-900 group-hover:!text-red-600" />
                             </Button>
                         </div>
                     )}
