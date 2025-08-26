@@ -4,6 +4,11 @@ import Script from "next/script";
 export const metadata = {
     title: "Convinced: A digital product expert on every call.",
     description: 'No more "let me get a sales engineer," just clear, confident explanations.',
+    icons: {
+        icon: "/logo.png",
+        apple: "/logo.png",
+        shortcut: "/logo.png",
+    },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
