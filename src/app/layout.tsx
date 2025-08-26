@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-    title: "A digital product expert on every call.",
+    title: "Convinced: A digital product expert on every call.",
     description: 'No more "let me get a sales engineer," just clear, confident explanations.',
 };
 
