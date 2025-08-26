@@ -24,7 +24,11 @@ export default function AboutPage() {
                     {/* Cofounder 1 */}
                     <div className="p-6 bg-white rounded-2xl border border-gray-200 shadow-sm">
                         <div className="flex gap-4 items-start">
-                            <img src="/profile/gautam.png" alt="Gautam G Sabhahit" className="w-14 h-14 rounded-full object-cover border border-gray-200" />
+                            <img
+                                src="/profile/gautam.png"
+                                alt="Gautam G Sabhahit"
+                                className="w-14 h-14 rounded-full object-cover border border-gray-200"
+                            />
                             <div>
                                 <h3 className="text-xl font-semibold text-gray-900">Gautam G Sabhahit</h3>
                                 <p className="text-gray-600">Co-founder</p>
@@ -49,7 +53,11 @@ export default function AboutPage() {
                     {/* Cofounder 2 */}
                     <div className="p-6 bg-white rounded-2xl border border-gray-200 shadow-sm">
                         <div className="flex gap-4 items-start">
-                            <img src="/profile/vignesh.png" alt="Vignesh G Sabhahit" className="w-14 h-14 rounded-full object-cover border border-gray-200" />
+                            <img
+                                src="/profile/vignesh.png"
+                                alt="Vignesh G Sabhahit"
+                                className="w-14 h-14 rounded-full object-cover border border-gray-200"
+                            />
                             <div>
                                 <h3 className="text-xl font-semibold text-gray-900">Vignesh G Sabhahit</h3>
                                 <p className="text-gray-600">Co-founder</p>
