@@ -222,10 +222,15 @@ function AgentDemoPageContent() {
 
                 {/* Content Area */}
                 <div className="flex flex-col flex-1 p-6 space-y-6">
+                    {/* Concept demo notice */}
+                    <div className="p-3 text-sm text-yellow-900 bg-yellow-50 rounded-lg border border-yellow-200">
+                        <strong>Concept demo:</strong> This is an early prototype for evaluation only and not the final product.
+                        Performance, features, and behavior may change. For now, you can ask only about HubSpot Contacts.
+                    </div>
                     {/* Screenshot Area - Larger */}
                     <div className="h-[600px]">
                         {activeScreenshot ? (
-                            <div className="overflow-hidden h-full bg-white rounded-lg border border-gray-200 shadow-sm flex items-center justify-center">
+                            <div className="flex overflow-hidden justify-center items-center h-full bg-white rounded-lg border border-gray-200 shadow-sm">
                                 {/* Screenshot Image - Contain within frame without cropping */}
                                 <img
                                     src={activeScreenshot.s3_url}
@@ -257,6 +262,48 @@ function AgentDemoPageContent() {
                                 useDynamicConfig={true}
                             />
                         </div>
+                    </div>
+
+                    {/* Feedback box */}
+                    <div className="max-w-xl mx-auto w-full">
+                        <form
+                            className="space-y-2"
+                            onSubmit={async (e) => {
+                                e.preventDefault();
+                                const form = e.currentTarget as HTMLFormElement;
+                                const textarea = form.elements.namedItem("feedback") as HTMLTextAreaElement;
+                                const value = textarea?.value.trim();
+                                if (!value) return;
+                                try {
+                                    const res = await fetch("/api/feedback", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ feedback: value }),
+                                    });
+                                    if (res.ok) {
+                                        textarea.value = "";
+                                        alert("Thanks for your feedback!");
+                                    } else {
+                                        alert("Failed to submit feedback. Please try again later.");
+                                    }
+                                } catch {
+                                    alert("Failed to submit feedback. Please try again later.");
+                                }
+                            }}
+                        >
+                            <label className="block text-sm font-medium text-gray-700">Quick feedback</label>
+                            <textarea
+                                name="feedback"
+                                rows={3}
+                                placeholder="Share your thoughts about this concept demo..."
+                                className="block w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <div className="flex justify-end">
+                                <button type="submit" className="px-4 py-2 text-white bg-blue-600 rounded-md text-sm hover:bg-blue-700">
+                                    Submit feedback
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>

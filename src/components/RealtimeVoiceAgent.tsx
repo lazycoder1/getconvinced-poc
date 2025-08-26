@@ -452,7 +452,7 @@ Always be helpful, patient, and professional. When explaining features, use clea
                             <p className="text-sm text-green-800">
                                 🎤 <strong>Voice agent is listening.</strong>
                                 <br />
-                                Say "hello" to begin, then ask a question or request a demo.
+                                Say "hello" to begin. For this concept demo, ask only about HubSpot Contacts.
                             </p>
                         </div>
                     )}

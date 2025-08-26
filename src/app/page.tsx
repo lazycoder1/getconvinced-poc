@@ -29,7 +29,7 @@ export default function WelcomePage() {
             <main className="px-4 py-20 mx-auto max-w-7xl sm:px-6 lg:px-8">
                 <div className="text-center">
                     {/* <div className="mb-3 text-sm font-semibold tracking-wide text-blue-700 uppercase">Get Convinced</div> */}
-                    <h1 className="mb-4 text-4xl font-bold text-gray-900 md:text-6xl">A digital product expert on every call.</h1>
+                    <h1 className="mb-4 text-4xl font-bold text-gray-900 md:text-6xl">A digital product expert on every call</h1>
                     <p className="mx-auto mb-8 max-w-3xl text-lg text-gray-600">
                         {/* <span className="block">Every rep sells like an expert.</span> */}
                         <span className="block italic">No more “let me get a sales engineer,” just clear, confident explanations.</span>
