@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/database';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { DEFAULT_S3_BUCKET } from '@/lib/s3';
 
 const s3Client = new S3Client({
     region: process.env.AWS_REGION || 'us-east-1',
@@ -116,7 +117,7 @@ export async function POST(
 
         // Upload content to S3
         const s3Key = `agent-configs/${websiteSlug}/prompts/${Date.now()}-${name.toLowerCase().replace(/\s+/g, '-')}.md`;
-        const s3Bucket = process.env.AWS_S3_BUCKET_NAME || 'hubspot-voice-agent-bucket';
+        const s3Bucket = DEFAULT_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME || 'hubspot-voice-agent-bucket';
 
         // Upload content to S3
         console.log('Uploading to S3:', { s3Bucket, s3Key, contentLength: content.length });

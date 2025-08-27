@@ -7,6 +7,7 @@
         "build": "prisma generate && next build",
         "start": "next start --port 3002",
         "lint": "next lint",
+        "s3:update-base-prompt": "node scripts/update-base-prompt.js",
         "db:setup": "node scripts/setup-dashboard.js",
         "db:generate": "prisma generate",
         "db:push": "prisma db push",

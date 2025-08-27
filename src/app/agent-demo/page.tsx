@@ -63,44 +63,8 @@ function AgentDemoPageContent() {
                 }
                 const agentConfigData = await agentConfigResponse.json();
 
-                // Use the prompt from the API (which should come from the database)
-                const apiPrompt = agentConfigData.system_prompt;
-
-                if (apiPrompt && apiPrompt.trim().length > 0) {
-                    setDebugMessages((prev) => [
-                        ...prev,
-                        {
-                            source: "system",
-                            message: `✅ Database prompt loaded successfully (${apiPrompt.length} characters)`,
-                            timestamp: new Date(),
-                        },
-                    ]);
-                } else {
-                    setDebugMessages((prev) => [
-                        ...prev,
-                        {
-                            source: "system",
-                            message: `⚠️ WARNING: API returned empty prompt! Check if database has prompts for "${websiteSlug}"`,
-                            timestamp: new Date(),
-                        },
-                    ]);
-                }
-
-                // Ensure we have a valid prompt, otherwise use minimal fallback
-                if (!apiPrompt || !apiPrompt.trim().length) {
-                    const fallbackPrompt = getMinimalFallbackPrompt(websiteSlug);
-                    agentConfigData.system_prompt = fallbackPrompt;
-
-                    setDebugMessages((prev) => [
-                        ...prev,
-                        {
-                            source: "system",
-                            message: `🔧 Using minimal fallback prompt since API returned empty prompt`,
-                            timestamp: new Date(),
-                        },
-                    ]);
-                }
-
+                // Do not expose system prompts on the client
+                delete agentConfigData.system_prompt;
                 setAgentConfig(agentConfigData);
 
                 // Set first screenshot as active by default
@@ -111,9 +75,7 @@ function AgentDemoPageContent() {
                 console.error("Error loading configuration:", err);
 
                 // Provide minimal fallback configuration - API completely failed
-                const fallbackPrompt = getMinimalFallbackPrompt(websiteSlug);
                 const fallbackConfig = {
-                    system_prompt: fallbackPrompt,
                     screenshots: [],
                     voice_config: {
                         voice: "alloy",
@@ -255,7 +217,6 @@ function AgentDemoPageContent() {
                             <RealtimeVoiceAgent
                                 playwrightStatus={playwrightStatus}
                                 onDebugMessage={handleDebugMessage}
-                                systemPrompt={agentConfig?.system_prompt}
                                 screenshots={agentConfig?.screenshots}
                                 agentName={`${websiteSlug} Assistant`}
                                 websiteName={websiteSlug}

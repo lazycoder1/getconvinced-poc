@@ -234,15 +234,53 @@ Remember to reference the screenshots provided to help users visually navigate H
             if (response.ok) {
                 const createdPrompt = await response.json();
 
-                // Add the created prompt to the local state
+                // Add the created prompt to the local state and refresh to load content
                 setPrompts((prev) => [createdPrompt, ...prev]);
+                await loadPrompts();
                 setShowUploadDialog(false);
                 setUploadedFile(null);
+                alert("✅ Prompt created from file");
             } else {
                 throw new Error("Failed to create prompt");
             }
         } catch (error) {
             console.error("Error creating prompt:", error);
+            alert(`❌ Failed to create prompt: ${error instanceof Error ? error.message : "Unknown error"}`);
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
+    const handleCreateEmptyPrompt = async () => {
+        try {
+            setIsCreating(true);
+            const defaultName = `New Prompt ${new Date().toLocaleString()}`;
+            const defaultContent = `# ${websiteSlug} Agent Instructions\n\nDescribe behavior here...`;
+
+            const response = await fetch(`/api/dashboard/websites/${websiteSlug}/prompts`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: defaultName,
+                    description: "Created from UI",
+                    content: defaultContent,
+                }),
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || "Failed to create prompt");
+            }
+
+            const created = await response.json();
+            // Prepend and enter edit mode for the new prompt
+            setPrompts((prev) => [created, ...prev]);
+            await loadPrompts();
+            if (created?.id) setEditingId(created.id);
+            alert("✅ New prompt created");
+        } catch (err) {
+            console.error("Error creating empty prompt:", err);
+            alert(`❌ Failed to create prompt: ${err instanceof Error ? err.message : "Unknown error"}`);
         } finally {
             setIsCreating(false);
         }
@@ -352,7 +390,7 @@ Remember to reference the screenshots provided to help users visually navigate H
                                 </div>
                             </DialogContent>
                         </Dialog>
-                        <Button>
+                        <Button onClick={handleCreateEmptyPrompt} disabled={isCreating}>
                             <Plus className="mr-2 w-4 h-4" />
                             New Prompt
                         </Button>

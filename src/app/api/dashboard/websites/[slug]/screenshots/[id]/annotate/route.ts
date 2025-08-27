@@ -35,8 +35,8 @@ export async function POST(
             return NextResponse.json({ error: 'Screenshot not found' }, { status: 404 });
         }
 
-        // Get a signed URL for the image
-        const imageUrl = await getSignedS3Url(screenshot.s3_key, 900);
+        // Get a signed URL for the image from the correct bucket
+        const imageUrl = await getSignedS3Url(screenshot.s3_key, 900, screenshot.s3_bucket);
 
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 

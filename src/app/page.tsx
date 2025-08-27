@@ -78,7 +78,7 @@ export default function WelcomePage() {
                             <Zap className="w-6 h-6 text-purple-600" />
                         </div>
                         <h3 className="mb-2 text-lg font-semibold text-gray-900">Build product confidence with prospects</h3>
-                        <p className="text-gray-600">Don't let prospects walk out of a meeting with unanswered products</p>
+                        <p className="text-gray-600">Don't let prospects walk out of a meeting with unanswered questions</p>
                     </div>
                 </div>
 

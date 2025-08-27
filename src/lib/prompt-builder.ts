@@ -1,11 +1,11 @@
 import { prisma } from './database';
-import { s3Client } from './s3';
+import { s3Client, DEFAULT_S3_BUCKET, getSignedS3Url } from './s3';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 
 export async function buildCombinedPrompt(websiteSlug: string): Promise<string> {
     try {
         // 1. Load base prompt from S3
-        const basePrompt = await loadPromptFromS3('shared/base-prompts/default-agent-instructions.md');
+        const basePrompt = await loadPromptFromS3('shared/base-prompts/default-agent-instructions.md', DEFAULT_S3_BUCKET);
 
         // 2. Get the active system prompt from database
         const activePrompt = await prisma.systemPrompt.findFirst({
@@ -18,8 +18,8 @@ export async function buildCombinedPrompt(websiteSlug: string): Promise<string> 
         let websitePrompt = '# Default Instructions\nPlease provide instructions for this agent.';
 
         if (activePrompt) {
-            // Load the actual prompt content from S3 using the stored key
-            websitePrompt = await loadPromptFromS3(activePrompt.s3_key);
+            // Load the actual prompt content from S3 using the stored key and its saved bucket
+            websitePrompt = await loadPromptFromS3(activePrompt.s3_key, activePrompt.s3_bucket || DEFAULT_S3_BUCKET);
         }
 
         // 3. Load screenshot annotations from database
@@ -43,10 +43,10 @@ export async function buildCombinedPrompt(websiteSlug: string): Promise<string> 
     }
 }
 
-export async function loadPromptFromS3(key: string): Promise<string> {
+export async function loadPromptFromS3(key: string, bucket?: string): Promise<string> {
     try {
         const command = new GetObjectCommand({
-            Bucket: process.env.AWS_S3_BUCKET!,
+            Bucket: bucket || DEFAULT_S3_BUCKET!,
             Key: key,
         });
 
@@ -80,7 +80,7 @@ export async function getWebsiteConfig(websiteSlug: string) {
         const screenshotsWithUrls = await Promise.all(
             screenshots.map(async (screenshot) => ({
                 ...screenshot,
-                s3_url: await import('./s3').then(m => m.getSignedS3Url(screenshot.s3_key))
+                s3_url: await getSignedS3Url(screenshot.s3_key, 3600, screenshot.s3_bucket || DEFAULT_S3_BUCKET)
             }))
         );
 

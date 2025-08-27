@@ -3,7 +3,6 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { RealtimeAgent, RealtimeSession } from "@openai/agents/realtime";
-import { z } from "zod";
 import createDynamicScreenshotTools from "@/lib/dynamic-screenshot-tools";
 
 interface Screenshot {
@@ -20,7 +19,7 @@ interface RealtimeVoiceAgentProps {
     playwrightStatus: "disconnected" | "connecting" | "connected";
     onDebugMessage: (source: string, message: string) => void;
     // Optional dynamic configuration
-    systemPrompt?: string;
+    systemPrompt?: string; // Deprecated: instructions are now set server-side
     screenshots?: Screenshot[];
     agentName?: string;
     websiteName?: string;
@@ -36,7 +35,7 @@ export default function RealtimeVoiceAgent({
     systemPrompt,
     screenshots = [],
     agentName = "HubSpot Assistant",
-    websiteName = "HubSpot",
+    websiteName = "hubspot",
     useDynamicConfig = false,
     hideHeader = false,
 }: RealtimeVoiceAgentProps) {
@@ -66,7 +65,9 @@ export default function RealtimeVoiceAgent({
                 onDebugMessage("realtime", "🔑 Initializing OpenAI SDK...");
 
                 // Generate ephemeral token
-                const tokenResponse = await fetch("/api/realtime-token");
+                const qs = new URLSearchParams();
+                if (websiteName) qs.set("website", websiteName.toLowerCase());
+                const tokenResponse = await fetch(`/api/realtime-token?${qs.toString()}`);
 
                 if (!tokenResponse.ok) {
                     throw new Error(`Failed to generate ephemeral token: ${tokenResponse.status} ${tokenResponse.statusText}`);
@@ -104,39 +105,10 @@ export default function RealtimeVoiceAgent({
         onDebugMessage("realtime", "🔌 Connecting to OpenAI Realtime API...");
 
         try {
-            let instructionsToUse: string;
             let assistantName: string = agentName;
 
-            if (useDynamicConfig && systemPrompt) {
-                // Use dynamic configuration from props
-                let enhancedPrompt = systemPrompt;
-                onDebugMessage("realtime", `📄 Using dynamic system prompt for ${websiteName}`);
-
-                // If we have dynamic screenshots, enhance the prompt with them
-                if (screenshots && screenshots.length > 0) {
-                    const screenshotSection = screenshots
-                        .map((s, index) => `${index + 1}. ${s.filename}: ${s.annotation || s.description || "No description available"}`)
-                        .join("\n");
-
-                    enhancedPrompt = `${systemPrompt}
-
-## Available Screenshots for Reference:
-${screenshotSection}
-
-You can use the screenshot tools to switch between these views to help guide the user visually.`;
-                    onDebugMessage("realtime", `🖼️ Enhanced prompt with ${screenshots.length} dynamic screenshots`);
-                } else {
-                    onDebugMessage("realtime", `⚠️ No dynamic screenshots available`);
-                }
-
-                instructionsToUse = enhancedPrompt;
-            } else {
-                // Fallback to basic instructions without screenshots
-                instructionsToUse = `You are a helpful AI assistant. Provide guidance and support for ${websiteName}.
-
-Always be helpful, patient, and professional. When explaining features, use clear, simple language that anyone can understand.`;
-                onDebugMessage("realtime", `📝 Using fallback instructions (no dynamic config)`);
-            }
+            // Do not send instructions from client; rely on server-configured session instructions
+            onDebugMessage("realtime", `📝 Using server-side instructions for ${websiteName}`);
 
             // Create dynamic tools based on available screenshots
             let dynamicTools: any[] = [];
@@ -155,7 +127,7 @@ Always be helpful, patient, and professional. When explaining features, use clea
 
             const hubspotAgent: RealtimeAgent = new RealtimeAgent({
                 name: assistantName,
-                instructions: instructionsToUse,
+                // Do not pass instructions from client
                 voice: "alloy",
                 tools: dynamicTools,
             });

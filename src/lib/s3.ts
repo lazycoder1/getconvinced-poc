@@ -11,9 +11,12 @@ const s3Client = new S3Client({
 
 export { s3Client };
 
-export async function uploadToS3(buffer: Buffer, key: string, contentType?: string): Promise<string> {
+// Unified default bucket fallback to avoid env name drift
+export const DEFAULT_S3_BUCKET = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME || '';
+
+export async function uploadToS3(buffer: Buffer, key: string, contentType?: string, bucket?: string): Promise<string> {
     const command = new PutObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET!,
+        Bucket: bucket || DEFAULT_S3_BUCKET!,
         Key: key,
         Body: buffer,
         ContentType: contentType,
@@ -23,18 +26,18 @@ export async function uploadToS3(buffer: Buffer, key: string, contentType?: stri
     return key;
 }
 
-export async function getSignedS3Url(key: string, expiresIn: number = 3600): Promise<string> {
+export async function getSignedS3Url(key: string, expiresIn: number = 3600, bucket?: string): Promise<string> {
     const command = new GetObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET!,
+        Bucket: bucket || DEFAULT_S3_BUCKET!,
         Key: key,
     });
 
     return await getSignedUrl(s3Client, command, { expiresIn });
 }
 
-export async function deleteFromS3(key: string): Promise<void> {
+export async function deleteFromS3(key: string, bucket?: string): Promise<void> {
     const command = new DeleteObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET!,
+        Bucket: bucket || DEFAULT_S3_BUCKET!,
         Key: key,
     });
 
