@@ -41,6 +41,7 @@ const getMinimalFallbackPrompt = (websiteSlug: string): string => {
 function AgentDemoPageContent() {
     const searchParams = useSearchParams();
     const websiteSlug = searchParams.get("website") || "hubspot";
+    const websiteDisplayName = websiteSlug ? websiteSlug.charAt(0).toUpperCase() + websiteSlug.slice(1) : "";
 
     const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
     const [loading, setLoading] = useState(true);
@@ -177,7 +178,7 @@ function AgentDemoPageContent() {
                 <div className="px-6 py-4 bg-white border-b border-gray-200">
                     <div className="flex justify-between items-center">
                         <div>
-                            <h1 className="text-xl font-bold text-gray-900">{websiteSlug} Voice Assistant</h1>
+                            <h1 className="text-xl font-bold text-gray-900">{websiteDisplayName} Voice Assistant</h1>
                             <p className="text-sm text-gray-600">AI-powered visual guidance</p>
                         </div>
                         <a
