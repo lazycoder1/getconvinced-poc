@@ -165,18 +165,18 @@ export default function WelcomePage() {
                             </h4>
                             <div className="flex flex-col gap-3 items-center sm:items-start">
                                 <div className="flex gap-4 items-center">
-                                    <img src="/logos/Ethereum.png" alt="Ethereum" className="w-auto h-8 opacity-80" />
-                                    <img src="/logos/Arbitrium.png" alt="Arbitrum" className="w-auto h-8 opacity-80" />
-                                    <img src="/logos/Polygon.png" alt="Polygon" className="w-auto h-8 opacity-80" />
+                                    <img src="/logos/Ethereum.png" alt="Ethereum" className="w-auto h-9 opacity-80" />
+                                    <img src="/logos/Arbitrium.png" alt="Arbitrum" className="w-auto h-9 opacity-80" />
+                                    <img src="/logos/Polygon.png" alt="Polygon" className="w-auto h-9 opacity-80" />
                                 </div>
                                 <div className="flex gap-4 items-center">
-                                    <img src="/logos/safe.png" alt="Safe" className="w-auto h-8 opacity-80" />
-                                    <img src="/logos/bnb.png" alt="BNB Chain" className="w-auto h-8 opacity-80" />
-                                    <img src="/logos/Optimism.png" alt="Optimism" className="w-auto h-8 opacity-80" />
+                                    <img src="/logos/safe.png" alt="Safe" className="w-auto h-9 opacity-80" />
+                                    <img src="/logos/bnb.png" alt="BNB Chain" className="w-auto h-9 opacity-80" />
+                                    <img src="/logos/Optimism.png" alt="Optimism" className="w-auto h-9 opacity-80" />
                                 </div>
                             </div>
                         </div>
-
+                        <br />
                         {/* Responsibilities */}
                         <div className="mt-4">
                             <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">Responsibilities</h4>
@@ -253,6 +253,7 @@ export default function WelcomePage() {
                                 </div>
                             </div>
                         </div>
+                        <br />
                         {/* Responsibilities */}
                         <div className="mt-4">
                             <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">Responsibilities</h4>
