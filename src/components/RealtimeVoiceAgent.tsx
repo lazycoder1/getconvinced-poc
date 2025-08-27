@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
 import { Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { RealtimeAgent, RealtimeSession } from "@openai/agents/realtime";
 import createDynamicScreenshotTools from "@/lib/dynamic-screenshot-tools";
@@ -15,6 +15,12 @@ interface Screenshot {
     sort_order: number;
 }
 
+export interface RealtimeVoiceAgentHandle {
+    start: () => void;
+    stop: () => void;
+    toggle: () => void;
+}
+
 interface RealtimeVoiceAgentProps {
     playwrightStatus: "disconnected" | "connecting" | "connected";
     onDebugMessage: (source: string, message: string) => void;
@@ -27,18 +33,33 @@ interface RealtimeVoiceAgentProps {
     useDynamicConfig?: boolean;
     // If true, hide the header (title and status indicator)
     hideHeader?: boolean;
+    // If true, hide the internal start/stop control button
+    hideControlButton?: boolean;
+    // Observe status changes for parent-controlled UI
+    onStatusChange?: (status: {
+        isInitialized: boolean;
+        isInitializing: boolean;
+        isConnected: boolean;
+        isConnecting: boolean;
+        isMuted: boolean;
+    }) => void;
 }
 
-export default function RealtimeVoiceAgent({
-    playwrightStatus,
-    onDebugMessage,
-    systemPrompt,
-    screenshots = [],
-    agentName = "HubSpot Assistant",
-    websiteName = "hubspot",
-    useDynamicConfig = false,
-    hideHeader = false,
-}: RealtimeVoiceAgentProps) {
+const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAgentProps>(function RealtimeVoiceAgent(
+    {
+        playwrightStatus,
+        onDebugMessage,
+        systemPrompt,
+        screenshots = [],
+        agentName = "HubSpot Assistant",
+        websiteName = "hubspot",
+        useDynamicConfig = false,
+        hideHeader = false,
+        hideControlButton = false,
+        onStatusChange,
+    }: RealtimeVoiceAgentProps,
+    ref
+) {
     const [isConnected, setIsConnected] = useState(false);
     const [isConnecting, setIsConnecting] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
@@ -336,6 +357,40 @@ export default function RealtimeVoiceAgent({
         }
     };
 
+    // Expose imperative controls to parent
+    useImperativeHandle(
+        ref,
+        () => ({
+            start: () => {
+                if (!isConnected) {
+                    connectToRealtime();
+                }
+            },
+            stop: () => {
+                if (isConnected) {
+                    disconnectFromRealtime();
+                }
+            },
+            toggle: () => {
+                handleVoiceToggle();
+            },
+        }),
+        [isConnected, connectToRealtime, disconnectFromRealtime]
+    );
+
+    // Notify parent of status changes
+    useEffect(() => {
+        if (onStatusChange) {
+            onStatusChange({
+                isInitialized,
+                isInitializing,
+                isConnected,
+                isConnecting,
+                isMuted,
+            });
+        }
+    }, [onStatusChange, isInitialized, isInitializing, isConnected, isConnecting, isMuted]);
+
     return (
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
             {/* Header - conditionally rendered */}
@@ -378,34 +433,36 @@ export default function RealtimeVoiceAgent({
 
                 {/* Voice Control */}
                 <div className="flex flex-col items-center space-y-4">
-                    <button
-                        onClick={handleVoiceToggle}
-                        disabled={isConnecting || !isInitialized}
-                        className={`flex items-center space-x-3 px-6 py-3 rounded-lg font-medium transition-all ${
-                            isConnected
-                                ? "text-white bg-red-500 hover:bg-red-600"
-                                : isConnecting
-                                ? "text-white bg-yellow-500 cursor-not-allowed"
-                                : "text-white bg-blue-600 hover:bg-blue-700"
-                        }`}
-                    >
-                        {isConnecting ? (
-                            <div className="w-5 h-5 rounded-full border-2 border-white animate-spin border-t-transparent" />
-                        ) : isConnected ? (
-                            <MicOff className="w-5 h-5" />
-                        ) : (
-                            <Mic className="w-5 h-5" />
-                        )}
-                        <span>
-                            {!isInitialized
-                                ? "Initializing..."
-                                : isConnecting
-                                ? "Connecting..."
-                                : isConnected
-                                ? "Stop Voice Agent"
-                                : "Start Voice Agent"}
-                        </span>
-                    </button>
+                    {!hideControlButton && (
+                        <button
+                            onClick={handleVoiceToggle}
+                            disabled={isConnecting || !isInitialized}
+                            className={`flex items-center space-x-3 px-6 py-3 rounded-lg font-medium transition-all ${
+                                isConnected
+                                    ? "text-white bg-red-500 hover:bg-red-600"
+                                    : isConnecting
+                                    ? "text-white bg-yellow-500 cursor-not-allowed"
+                                    : "text-white bg-blue-600 hover:bg-blue-700"
+                            }`}
+                        >
+                            {isConnecting ? (
+                                <div className="w-5 h-5 rounded-full border-2 border-white animate-spin border-t-transparent" />
+                            ) : isConnected ? (
+                                <MicOff className="w-5 h-5" />
+                            ) : (
+                                <Mic className="w-5 h-5" />
+                            )}
+                            <span>
+                                {!isInitialized
+                                    ? "Initializing..."
+                                    : isConnecting
+                                    ? "Connecting..."
+                                    : isConnected
+                                    ? "Stop Voice Agent"
+                                    : "Start Voice Agent"}
+                            </span>
+                        </button>
+                    )}
 
                     {/* Hidden audio element for explicit playback */}
                     <audio ref={audioRef} className="hidden" autoPlay />
@@ -432,4 +489,6 @@ export default function RealtimeVoiceAgent({
             </div>
         </div>
     );
-}
+});
+
+export default RealtimeVoiceAgent;

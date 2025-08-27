@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import RealtimeVoiceAgent from "@/components/RealtimeVoiceAgent";
+import RealtimeVoiceAgent, { RealtimeVoiceAgentHandle } from "@/components/RealtimeVoiceAgent";
 import { Button } from "@/components/ui/button";
 import { Loader2, MessageSquare, Home, X } from "lucide-react";
 
@@ -49,6 +49,14 @@ function AgentDemoPageContent() {
     const [debugMessages, setDebugMessages] = useState<Array<{ source: string; message: string; timestamp: Date }>>([]);
     const [activeScreenshot, setActiveScreenshot] = useState<Screenshot | null>(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+    const agentRef = React.useRef<RealtimeVoiceAgentHandle | null>(null);
+    const [agentStatus, setAgentStatus] = useState({
+        isInitialized: false,
+        isInitializing: false,
+        isConnected: false,
+        isConnecting: false,
+        isMuted: false,
+    });
 
     useEffect(() => {
         const loadConfiguration = async () => {
@@ -162,7 +170,7 @@ function AgentDemoPageContent() {
     }
 
     return (
-        <div className="flex h-screen bg-gray-50">
+        <div className="flex min-h-screen bg-gray-50">
             {/* Main Content */}
             <div className="flex flex-col flex-1">
                 {/* Simple Header */}
@@ -184,11 +192,39 @@ function AgentDemoPageContent() {
 
                 {/* Content Area */}
                 <div className="flex flex-col flex-1 p-6 space-y-6">
-                    {/* Concept demo notice */}
-                    <div className="p-3 text-sm text-yellow-900 bg-yellow-50 rounded-lg border border-yellow-200">
-                        <strong>Concept demo:</strong> This is an early prototype for evaluation only and not the final product.
-                        Performance, features, and behavior may change. For now, you can ask only about HubSpot Contacts.
+                    {/* Concept demo notice with Start/Stop at end */}
+                    <div className="flex items-center justify-between p-3 text-sm text-yellow-900 bg-yellow-50 rounded-lg border border-yellow-200">
+                        <div>
+                            <strong>Concept demo:</strong> This is an early prototype for evaluation only and not the final product.
+                            Performance, features, and behavior may change. For now, you can ask only about HubSpot Contacts.
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <button
+                                onClick={() => agentRef.current?.toggle()}
+                                disabled={agentStatus.isConnecting || !agentStatus.isInitialized}
+                                className={`flex items-center px-4 py-2 rounded-md font-medium transition-all ${
+                                    agentStatus.isConnected
+                                        ? "text-white bg-red-500 hover:bg-red-600"
+                                        : agentStatus.isConnecting
+                                        ? "text-white bg-yellow-500 cursor-not-allowed"
+                                        : "text-white bg-blue-600 hover:bg-blue-700"
+                                }`}
+                            >
+                                {agentStatus.isConnecting
+                                    ? "Connecting..."
+                                    : agentStatus.isConnected
+                                    ? "Stop Voice Agent"
+                                    : "Start Voice Agent"}
+                            </button>
+                        </div>
                     </div>
+                    {/* Top instruction banner */}
+                    {!agentStatus.isConnected && (
+                        <div className="p-3 text-sm text-blue-900 bg-blue-50 rounded-lg border border-blue-200">
+                            Click "Start Voice Agent" above, then speak your question. Example: "How do I find all contacts that
+                            unsubscribed?"
+                        </div>
+                    )}
                     {/* Screenshot Area - Larger */}
                     <div className="h-[600px]">
                         {activeScreenshot ? (
@@ -211,18 +247,20 @@ function AgentDemoPageContent() {
                         )}
                     </div>
 
-                    {/* Voice Controls Below Screenshot */}
-                    <div className="flex justify-center">
-                        <div className="w-full max-w-sm">
-                            <RealtimeVoiceAgent
-                                playwrightStatus={playwrightStatus}
-                                onDebugMessage={handleDebugMessage}
-                                screenshots={agentConfig?.screenshots}
-                                agentName={`${websiteSlug} Assistant`}
-                                websiteName={websiteSlug}
-                                useDynamicConfig={true}
-                            />
-                        </div>
+                    {/* Hidden mount of RealtimeVoiceAgent (no visible card) */}
+                    <div className="hidden" aria-hidden="true">
+                        <RealtimeVoiceAgent
+                            ref={agentRef}
+                            playwrightStatus={playwrightStatus}
+                            onDebugMessage={handleDebugMessage}
+                            screenshots={agentConfig?.screenshots}
+                            agentName={`${websiteSlug} Assistant`}
+                            websiteName={websiteSlug}
+                            useDynamicConfig={true}
+                            hideHeader={true}
+                            hideControlButton={true}
+                            onStatusChange={setAgentStatus}
+                        />
                     </div>
 
                     {/* Feedback box */}
