@@ -191,3 +191,11 @@ input[type="search"]::placeholder {
   color: #111827 !important; /* gray-900 */
   stroke: currentColor !important;
 }
+
+/* Ensure full-page gradient matches layout and avoids dark-mode bottom band */
+html {
+  background: linear-gradient(135deg, #eff6ff, #ffffff, #eef2ff) !important;
+}
+body {
+  background: transparent !important;
+}

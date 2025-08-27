@@ -24,6 +24,9 @@ import {
     Github,
 } from "lucide-react";
 import Header from "@/components/Header";
+import { Righteous } from "next/font/google";
+
+const hipster = Righteous({ subsets: ["latin"], weight: "400" });
 
 export default function WelcomePage() {
     return (
@@ -49,22 +52,10 @@ export default function WelcomePage() {
                         {/* <span className="block">Every rep sells like an expert.</span> */}
                         <span className="block italic">No more “let me get a sales engineer,” just clear, confident explanations.</span>
                     </p>
-
-                    {/* CTA Button */}
-                    <Link
-                        href="/agent-demo?website=hubspot"
-                        className="inline-flex items-center px-8 py-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 duration-200"
-                    >
-                        <Play className="mr-2 w-5 h-5" />
-                        Try the Demo
-                        <ArrowRight className="ml-2 w-5 h-5" />
-                    </Link>
                 </div>
 
-                {/* About removed per request */}
-
                 {/* Value Props */}
-                <div className="grid grid-cols-1 gap-8 mt-20 md:grid-cols-3">
+                <div className="grid grid-cols-1 gap-8 mt-16 md:grid-cols-3">
                     <div className="p-6 bg-white rounded-xl border border-gray-200 shadow-sm transition-shadow hover:shadow-md">
                         <div className="flex justify-center items-center mb-4 w-12 h-12 bg-blue-100 rounded-lg">
                             <Users className="w-6 h-6 text-blue-600" />
@@ -91,7 +82,7 @@ export default function WelcomePage() {
                 </div>
 
                 {/* Product Promise */}
-                <section className="p-8 mt-20 bg-blue-50 rounded-2xl border border-blue-100">
+                <section className="p-8 mt-16 bg-blue-50 rounded-2xl border border-blue-100">
                     <div className="mx-auto max-w-4xl text-center">
                         <h2 className="mb-3 text-2xl font-bold text-blue-900">Why it matters</h2>
                         <p className="text-blue-900">
@@ -108,6 +99,10 @@ export default function WelcomePage() {
                                 <ArrowRight className="ml-2 w-5 h-5" />
                             </Link>
                         </div>
+                        <p className={`${hipster.className} mt-4 text-xl text-blue-900`}>
+                            View our concept Hubspot AE agent in action. Go crazy - Ask whatever you want. Get a crisp and accurate answers
+                            with a live demo of the product.
+                        </p>
                     </div>
                 </section>
 
