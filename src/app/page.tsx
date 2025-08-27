@@ -35,8 +35,16 @@ export default function WelcomePage() {
                 <div className="text-center">
                     {/* <div className="mb-3 text-sm font-semibold tracking-wide text-blue-700 uppercase">Get Convinced</div> */}
                     <h1 className="mb-4 text-4xl font-bold text-gray-900 md:text-6xl">
-                        Never join a sales call without an expert(agent) by your side
+                        Never join a sales call without <br /> an{" "}
+                        <span className="whitespace-nowrap">
+                            expert{" "}
+                            <span className="italic" style={{ color: "#165DFC" }}>
+                                agent
+                            </span>
+                        </span>{" "}
+                        by your side
                     </h1>
+                    <br />
                     <p className="mx-auto mb-8 max-w-3xl text-lg text-gray-600">
                         {/* <span className="block">Every rep sells like an expert.</span> */}
                         <span className="block italic">No more “let me get a sales engineer,” just clear, confident explanations.</span>
@@ -103,59 +111,13 @@ export default function WelcomePage() {
                     </div>
                 </section>
 
-                {/* Demo Section */}
-                <div className="p-8 mt-20 bg-white rounded-2xl border border-gray-200 shadow-sm">
-                    <div className="mb-8 text-center">
-                        <h2 className="mb-4 text-2xl font-bold text-gray-900">Try the Demo</h2>
-                        <p className="text-gray-600">Give a live product walkthrough powered by our agent with no prep required.</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                        <div className="p-6 bg-blue-50 rounded-lg">
-                            <h3 className="mb-2 font-semibold text-blue-900">What You'll Experience</h3>
-                            <ul className="space-y-3 text-sm text-blue-900">
-                                <li className="flex gap-2 items-center">
-                                    <Mic className="w-4 h-4" /> <span>Natural voice conversation</span>
-                                </li>
-                                <li className="flex gap-2 items-center">
-                                    <Image className="w-4 h-4" /> <span>Visual screenshot references</span>
-                                </li>
-                                <li className="flex gap-2 items-center">
-                                    <Brain className="w-4 h-4" /> <span>Context-aware responses</span>
-                                </li>
-                                <li className="flex gap-2 items-center">
-                                    <Clock className="w-4 h-4" /> <span>Real-time assistance</span>
-                                </li>
-                                <li className="flex gap-2 items-center">
-                                    <Languages className="w-4 h-4" /> <span>Multi-lingual</span>
-                                </li>
-                                <li className="flex gap-2 items-center">
-                                    <Palette className="w-4 h-4" /> <span>Adherence to brand guidelines</span>
-                                </li>
-                                <li className="flex gap-2 items-center">
-                                    <Shield className="w-4 h-4" /> <span>Ring fenced to products</span>
-                                </li>
-                            </ul>
-                        </div>
-
-                        <div className="p-6 bg-green-50 rounded-lg">
-                            <h3 className="mb-2 font-semibold text-green-900">Perfect For</h3>
-                            <ul className="space-y-3 text-sm text-green-900">
-                                <li className="flex gap-2 items-center">
-                                    <Users className="w-4 h-4" /> <span>Sales teams</span>
-                                </li>
-                                <li className="flex gap-2 items-center">
-                                    <Headphones className="w-4 h-4" /> <span>Customer support</span>
-                                </li>
-                                <li className="flex gap-2 items-center">
-                                    <PlayCircle className="w-4 h-4" /> <span>Product demos</span>
-                                </li>
-                                <li className="flex gap-2 items-center">
-                                    <GraduationCap className="w-4 h-4" /> <span>Training sessions</span>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
+                {/* About summary (from About page) */}
+                <div className="mx-auto mt-20 max-w-3xl text-center">
+                    <div className="mb-3 text-sm font-semibold tracking-wide text-blue-700 uppercase">About</div>
+                    <h2 className="mb-4 text-4xl font-bold text-gray-900 md:text-5xl">Two founders on a simple mission</h2>
+                    <p className="text-lg text-gray-600">
+                        We’re building tools that help sales teams explain complex products with clarity and confidence any time, anywhere.
+                    </p>
                 </div>
 
                 {/* Founders Section (About) */}
@@ -175,23 +137,46 @@ export default function WelcomePage() {
                         </div>
                         {/* Background */}
                         <div className="mt-4">
-                            <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">Background</h4>
+                            <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">
+                                Background - Ex-FAANG + Ex-Founder - Brings Engineering Acumen
+                            </h4>
                             <ul className="space-y-2 text-sm text-gray-700">
                                 <li className="flex gap-2 items-start">
-                                    <CheckCircle2 className="mt-0.5 w-4 h-4 text-blue-600" />{" "}
-                                    <span>Ex-FAANG + Ex-Founder - Brings Engineering Acumen</span>
+                                    <CheckCircle2 className="mt-0.5 w-4 h-4 shrink-0 text-blue-600" />{" "}
+                                    <span>
+                                        Created a developer focussed web3 data product which was used by top tier talent in the space.
+                                        Achieved consistent high usage metrics across the board. Scaled the product to about ~$400k in
+                                        revenues and grants.
+                                    </span>
                                 </li>
                                 <li className="flex gap-2 items-start">
                                     <CheckCircle2 className="mt-0.5 w-4 h-4 text-blue-600" />{" "}
                                     <span>
-                                        Created a developer focussed web3 data product which was used by top tier talent in the space.
-                                        Achieved consistent high usage metrics across the board. Won multiple equity free grants as a
-                                        recognition to our contribution to the adoption of Account Abstraction Tech Stacks in Web3. Scaled
-                                        the product to about ~$400k in revenues and grants.
+                                        While part of Amazon Pay, I helped build the emi and buy now pay later product for the Indian
+                                        custoemrs.
                                     </span>
                                 </li>
                             </ul>
                         </div>
+                        {/* Responsibilities */}
+                        <div className="mt-4">
+                            <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">
+                                Developed products loved by...
+                            </h4>
+                            <div className="flex flex-col gap-3 items-center sm:items-start">
+                                <div className="flex gap-4 items-center">
+                                    <img src="/logos/Ethereum.png" alt="Ethereum" className="w-auto h-8 opacity-80" />
+                                    <img src="/logos/Arbitrium.png" alt="Arbitrum" className="w-auto h-8 opacity-80" />
+                                    <img src="/logos/Polygon.png" alt="Polygon" className="w-auto h-8 opacity-80" />
+                                </div>
+                                <div className="flex gap-4 items-center">
+                                    <img src="/logos/safe.png" alt="Safe" className="w-auto h-8 opacity-80" />
+                                    <img src="/logos/bnb.png" alt="BNB Chain" className="w-auto h-8 opacity-80" />
+                                    <img src="/logos/Optimism.png" alt="Optimism" className="w-auto h-8 opacity-80" />
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Responsibilities */}
                         <div className="mt-4">
                             <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">Responsibilities</h4>
@@ -239,20 +224,34 @@ export default function WelcomePage() {
                         </div>
                         {/* Background */}
                         <div className="mt-4">
-                            <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">Background</h4>
+                            <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">
+                                Background - Ex-Investment Banking - Brings Business Acumen
+                            </h4>
                             <ul className="space-y-2 text-sm text-gray-700">
                                 <li className="flex gap-2 items-start">
-                                    <CheckCircle2 className="mt-0.5 w-4 h-4 text-blue-600" />{" "}
-                                    <span>Ex-Investment Banking - Brings Business Acumen</span>
-                                </li>
-                                <li className="flex gap-2 items-start">
-                                    <CheckCircle2 className="mt-0.5 w-4 h-4 text-blue-600" />{" "}
+                                    <CheckCircle2 className="mt-0.5 w-4 h-4 shrink-0 text-blue-600" />{" "}
                                     <span>
                                         Successfully raised $35mn from well known VCs across 8 transaction for 6 companies operating in the
                                         B2B SaaS, Edtech, AyurvedaTech & the Consumer spaces.
                                     </span>
                                 </li>
                             </ul>
+                        </div>
+                        <br />
+                        <br />
+                        {/* Led successful mandate closures for */}
+                        <div className="mt-4">
+                            <h4 className="mb-2 text-xs font-semibold tracking-wide text-gray-900 uppercase">
+                                Led successful mandate closures for...
+                            </h4>
+                            <div className="flex flex-col gap-3 items-center sm:items-start">
+                                <div className="flex gap-4 items-center">
+                                    <img src="/logos/bizom.png" alt="Bizom" className="w-32 h-auto opacity-80" />
+                                </div>
+                                <div className="flex gap-4 items-center">
+                                    <img src="/logos/enmovil.png" alt="Enmovil" className="w-32 h-auto opacity-80" />
+                                </div>
+                            </div>
                         </div>
                         {/* Responsibilities */}
                         <div className="mt-4">
@@ -267,6 +266,7 @@ export default function WelcomePage() {
                                 </li>
                             </ul>
                         </div>
+
                         <div className="flex gap-4 items-center pt-4 mt-auto border-t border-gray-100">
                             <Link
                                 href="https://linkedin.com/in/vignesh-sabhahit-4a637452"

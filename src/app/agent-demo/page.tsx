@@ -4,7 +4,23 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import RealtimeVoiceAgent, { RealtimeVoiceAgentHandle } from "@/components/RealtimeVoiceAgent";
 import { Button } from "@/components/ui/button";
-import { Loader2, MessageSquare, Home, X } from "lucide-react";
+import {
+    Loader2,
+    MessageSquare,
+    Home,
+    X,
+    Mic,
+    Image,
+    Brain,
+    Clock,
+    Languages,
+    Palette,
+    Shield,
+    Users,
+    Headphones,
+    PlayCircle,
+    GraduationCap,
+} from "lucide-react";
 
 interface Screenshot {
     id: string;
@@ -262,6 +278,61 @@ function AgentDemoPageContent() {
                             hideControlButton={true}
                             onStatusChange={setAgentStatus}
                         />
+                    </div>
+
+                    {/* Demo Section moved from homepage */}
+                    <div className="p-8 bg-white rounded-2xl border border-gray-200 shadow-sm">
+                        <div className="mb-8 text-center">
+                            <h2 className="mb-4 text-2xl font-bold text-gray-900">Try the Demo</h2>
+                            <p className="text-gray-600">Give a live product walkthrough powered by our agent with no prep required.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                            <div className="p-6 bg-blue-50 rounded-lg">
+                                <h3 className="mb-2 font-semibold text-blue-900">What You'll Experience</h3>
+                                <ul className="space-y-3 text-sm text-blue-900">
+                                    <li className="flex gap-2 items-center">
+                                        <Mic className="w-4 h-4" /> <span>Natural voice conversation</span>
+                                    </li>
+                                    <li className="flex gap-2 items-center">
+                                        <Image className="w-4 h-4" /> <span>Visual screenshot references</span>
+                                    </li>
+                                    <li className="flex gap-2 items-center">
+                                        <Brain className="w-4 h-4" /> <span>Context-aware responses</span>
+                                    </li>
+                                    <li className="flex gap-2 items-center">
+                                        <Clock className="w-4 h-4" /> <span>Real-time assistance</span>
+                                    </li>
+                                    <li className="flex gap-2 items-center">
+                                        <Languages className="w-4 h-4" /> <span>Multi-lingual</span>
+                                    </li>
+                                    <li className="flex gap-2 items-center">
+                                        <Palette className="w-4 h-4" /> <span>Adherence to brand guidelines</span>
+                                    </li>
+                                    <li className="flex gap-2 items-center">
+                                        <Shield className="w-4 h-4" /> <span>Ring fenced to products</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-6 bg-green-50 rounded-lg">
+                                <h3 className="mb-2 font-semibold text-green-900">Perfect For</h3>
+                                <ul className="space-y-3 text-sm text-green-900">
+                                    <li className="flex gap-2 items-center">
+                                        <Users className="w-4 h-4" /> <span>Sales teams</span>
+                                    </li>
+                                    <li className="flex gap-2 items-center">
+                                        <Headphones className="w-4 h-4" /> <span>Customer support</span>
+                                    </li>
+                                    <li className="flex gap-2 items-center">
+                                        <PlayCircle className="w-4 h-4" /> <span>Product demos</span>
+                                    </li>
+                                    <li className="flex gap-2 items-center">
+                                        <GraduationCap className="w-4 h-4" /> <span>Training sessions</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Feedback box */}
