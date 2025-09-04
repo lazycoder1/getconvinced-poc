@@ -232,7 +232,7 @@ export default function ScreenshotsPage() {
             <div className="p-8">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading screenshots...</p>
+                    <p className="text-gray-600">Loading media...</p>
                 </div>
             </div>
         );
@@ -244,8 +244,8 @@ export default function ScreenshotsPage() {
             <div className="mb-8">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Screenshots</h1>
-                        <p className="mt-2 text-gray-600">Manage screenshots and annotations for {websiteSlug}</p>
+                        <h1 className="text-3xl font-bold text-gray-900">Media</h1>
+                        <p className="mt-2 text-gray-600">Manage images and GIFs with annotations for {websiteSlug}</p>
                     </div>
                     <div className="flex space-x-3 items-center">
                         <Button variant="outline" onClick={handleExportAll}>
@@ -287,7 +287,7 @@ export default function ScreenshotsPage() {
                             />
                             <Button variant="outline" disabled={uploadLoading}>
                                 <Plus className="h-4 w-4 mr-2" />
-                                {uploadLoading ? "Uploading..." : "Add Screenshots"}
+                                {uploadLoading ? "Uploading..." : "Add Media"}
                             </Button>
                         </div>
                     </div>
@@ -298,12 +298,12 @@ export default function ScreenshotsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Screenshots</CardTitle>
+                        <CardTitle className="text-sm font-medium">Total Media</CardTitle>
                         <Image className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{screenshots.length}</div>
-                        <p className="text-xs text-muted-foreground">Images in collection</p>
+                        <p className="text-xs text-muted-foreground">Items in collection</p>
                     </CardContent>
                 </Card>
 
@@ -338,13 +338,18 @@ export default function ScreenshotsPage() {
                             <div className="flex items-center justify-between">
                                 <CardTitle className="text-lg flex items-center">
                                     <Image className="h-5 w-5 mr-2" />
-                                    Screenshot {index + 1}
+                                    Media {index + 1}
                                     {screenshot.is_default && <Star className="h-4 w-4 ml-2 text-yellow-500 fill-current" />}
                                 </CardTitle>
                                 <div className="flex items-center space-x-2">
                                     {screenshot.is_default && (
                                         <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
                                             Default
+                                        </Badge>
+                                    )}
+                                    {screenshot.filename && screenshot.filename.toLowerCase().endsWith(".gif") && (
+                                        <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                                            GIF
                                         </Badge>
                                     )}
                                     <Badge variant="outline">{screenshot.sort_order}</Badge>
@@ -480,14 +485,14 @@ export default function ScreenshotsPage() {
                 <Card>
                     <CardContent className="p-12 text-center">
                         <Image className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">No screenshots yet</h3>
-                        <p className="text-gray-600 mb-6">Upload screenshots to help your AI agent understand this website.</p>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">No media yet</h3>
+                        <p className="text-gray-600 mb-6">Upload images or GIFs to help your AI agent understand this website.</p>
 
                         {/* Drag and Drop Area */}
                         <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 mb-4 hover:border-blue-400 transition-colors">
                             <div className="text-center">
                                 <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                                <p className="text-sm text-gray-600 mb-2">Drag and drop images here, or click to browse</p>
+                                <p className="text-sm text-gray-600 mb-2">Drag and drop images or GIFs here, or click to browse</p>
                                 <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB each</p>
                             </div>
                             <input
