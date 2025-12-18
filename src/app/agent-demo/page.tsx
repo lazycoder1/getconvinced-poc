@@ -4,6 +4,9 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import RealtimeVoiceAgent, { RealtimeVoiceAgentHandle } from "@/components/RealtimeVoiceAgent";
 import { Button } from "@/components/ui/button";
+import DemoModeToggle from "@/components/DemoModeToggle";
+import LiveBrowserViewer from "@/components/LiveBrowserViewer";
+import { getDemoModeManager, type DemoMode } from "@/lib/demo-mode";
 import {
     Loader2,
     MessageSquare,
@@ -20,6 +23,7 @@ import {
     Headphones,
     PlayCircle,
     GraduationCap,
+    Globe,
 } from "lucide-react";
 
 interface Screenshot {
@@ -74,6 +78,20 @@ function AgentDemoPageContent() {
         isConnecting: false,
         isMuted: false,
     });
+    const [demoMode, setDemoMode] = useState<DemoMode>("screenshot");
+
+    // Sync demo mode from manager
+    useEffect(() => {
+        const manager = getDemoModeManager();
+        setDemoMode(manager.getMode());
+        
+        const unsubscribe = manager.subscribe((newMode) => {
+            setDemoMode(newMode);
+            handleDebugMessage("system", `🔄 Demo mode switched to: ${newMode}`);
+        });
+
+        return unsubscribe;
+    }, []);
 
     useEffect(() => {
         const loadConfiguration = async () => {
@@ -197,13 +215,17 @@ function AgentDemoPageContent() {
                             <h1 className="text-xl font-bold text-gray-900">{websiteDisplayName} Voice Assistant</h1>
                             <p className="text-sm text-gray-600">AI-powered visual guidance</p>
                         </div>
-                        <a
-                            href="/"
-                            className="flex items-center px-3 py-2 text-white bg-gray-600 rounded-lg transition-colors hover:bg-gray-700"
-                        >
-                            <Home className="mr-2 w-4 h-4" />
-                            Home
-                        </a>
+                        <div className="flex items-center gap-3">
+                            {/* Demo Mode Toggle */}
+                            <DemoModeToggle />
+                            <a
+                                href="/"
+                                className="flex items-center px-3 py-2 text-white bg-gray-600 rounded-lg transition-colors hover:bg-gray-700"
+                            >
+                                <Home className="mr-2 w-4 h-4" />
+                                Home
+                            </a>
+                        </div>
                     </div>
                 </div>
 
@@ -242,11 +264,19 @@ function AgentDemoPageContent() {
                             unsubscribed?"
                         </div>
                     )}
-                    {/* Screenshot Area - Larger */}
+                    {/* Demo View Area - Switches between Screenshot and Live Browser */}
                     <div className="h-[600px]">
-                        {activeScreenshot ? (
+                        {demoMode === "live" ? (
+                            /* Live Browser Mode */
+                            <LiveBrowserViewer
+                                onStatusChange={(status) => {
+                                    handleDebugMessage("browser", `Browser status: ${status}`);
+                                }}
+                                onDebugMessage={(type, message) => handleDebugMessage(type, message)}
+                            />
+                        ) : activeScreenshot ? (
+                            /* Screenshot Mode - with active screenshot */
                             <div className="flex overflow-hidden justify-center items-center h-full bg-white rounded-lg border border-gray-200 shadow-sm">
-                                {/* Screenshot Image - Contain within frame without cropping */}
                                 <img
                                     src={activeScreenshot.s3_url}
                                     alt={activeScreenshot.filename}
@@ -254,11 +284,20 @@ function AgentDemoPageContent() {
                                 />
                             </div>
                         ) : (
+                            /* Screenshot Mode - no active screenshot */
                             <div className="flex justify-center items-center h-full bg-white rounded-lg border border-gray-200 shadow-sm">
                                 <div className="text-center text-gray-500">
                                     <div className="mb-4 text-4xl">📱</div>
                                     <h3 className="mb-2 text-lg font-semibold">No Screenshot Active</h3>
                                     <p>Start the voice agent to see visual guidance</p>
+                                    <p className="mt-2 text-sm">
+                                        Or <button 
+                                            onClick={() => getDemoModeManager().setMode("live")}
+                                            className="text-blue-600 hover:underline"
+                                        >
+                                            switch to live browser mode
+                                        </button>
+                                    </p>
                                 </div>
                             </div>
                         )}
