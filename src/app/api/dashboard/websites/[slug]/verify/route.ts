@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getWebsiteConfig } from '@/lib/prompt-builder';
+import { getWebsiteConfig, buildFullPrompt, DemoMode } from '@/lib/prompt-builder';
 
 export async function GET(
     request: NextRequest,
@@ -8,10 +8,22 @@ export async function GET(
     try {
         const resolvedParams = await params;
         const websiteSlug = resolvedParams.slug;
+        
+        // Get mode from query params (default: screenshot)
+        const searchParams = request.nextUrl.searchParams;
+        const mode = (searchParams.get('mode') || 'screenshot') as DemoMode;
 
         if (!websiteSlug) {
             return NextResponse.json(
                 { error: 'Website slug is required' },
+                { status: 400 }
+            );
+        }
+
+        // Validate mode
+        if (mode !== 'screenshot' && mode !== 'live') {
+            return NextResponse.json(
+                { error: 'Invalid mode. Must be "screenshot" or "live"' },
                 { status: 400 }
             );
         }
@@ -28,16 +40,29 @@ export async function GET(
             );
         }
 
-        // Build the final combined prompt with error handling
+        // Build the final combined prompt with mode-specific instructions
         let finalPrompt = "No prompt available";
+        let promptMeta = {
+            mode,
+            routeCount: 0,
+            screenshotCount: 0,
+        };
+
         try {
-            const { buildCombinedPrompt } = await import('@/lib/prompt-builder');
-            finalPrompt = await buildCombinedPrompt(websiteSlug);
+            const result = await buildFullPrompt(websiteSlug, mode);
+            finalPrompt = result.prompt;
+            promptMeta = {
+                mode: result.mode,
+                routeCount: result.routes.length,
+                screenshotCount: result.screenshotCount,
+            };
         } catch (error) {
-            console.warn('Failed to build combined prompt, using fallback:', error);
+            console.warn('Failed to build full prompt, using fallback:', error);
             finalPrompt = `# ${config.website.name} Agent Instructions
 
 You are an AI assistant specialized in ${config.website.name}. Help users navigate and understand the platform's features.
+
+## Mode: ${mode.toUpperCase()}
 
 ## Available Screenshots
 ${config.screenshots.length > 0 ? config.screenshots.map(s => `- ${s.filename}: ${s.annotation || 'No description'}`).join('\n') : 'No screenshots available'}
@@ -46,14 +71,12 @@ ${config.screenshots.length > 0 ? config.screenshots.map(s => `- ${s.filename}: 
 ${config.website.description || 'No description provided'}`;
         }
 
-        // Use the built prompt directly (same logic as agent config endpoint)
-        // No need for circular fetch - this endpoint already builds the prompt correctly
-
         return NextResponse.json({
             website: config.website,
             screenshots: config.screenshots,
             system_prompt: config.system_prompt,
-            final_prompt: finalPrompt
+            final_prompt: finalPrompt,
+            prompt_meta: promptMeta,
         });
     } catch (error) {
         console.error('Error fetching verification data:', error);

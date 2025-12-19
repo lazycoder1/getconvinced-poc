@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, Copy, CheckCircle, AlertCircle, FileText, Image as ImageIcon, Globe } from "lucide-react";
+import { Eye, Copy, CheckCircle, AlertCircle, FileText, Image as ImageIcon, Globe, Monitor, Camera, RefreshCw } from "lucide-react";
+
+type DemoMode = "screenshot" | "live";
 
 interface Website {
     id: string;
@@ -34,11 +36,18 @@ interface SystemPrompt {
     s3_key: string;
 }
 
+interface PromptMeta {
+    mode: DemoMode;
+    routeCount: number;
+    screenshotCount: number;
+}
+
 interface VerificationData {
     website: Website;
     screenshots: Screenshot[];
     system_prompt?: SystemPrompt;
     final_prompt: string;
+    prompt_meta?: PromptMeta;
 }
 
 export default function VerifyPage() {
@@ -49,18 +58,15 @@ export default function VerifyPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    const [mode, setMode] = useState<DemoMode>("screenshot");
 
-    useEffect(() => {
-        loadVerificationData();
-    }, [websiteSlug]);
-
-    const loadVerificationData = async () => {
+    const loadVerificationData = useCallback(async (selectedMode: DemoMode = mode) => {
         try {
             setLoading(true);
             setError(null);
 
-            // Get all verification data from the API endpoint
-            const response = await fetch(`/api/dashboard/websites/${websiteSlug}/verify`);
+            // Get all verification data from the API endpoint with mode parameter
+            const response = await fetch(`/api/dashboard/websites/${websiteSlug}/verify?mode=${selectedMode}`);
             if (!response.ok) {
                 throw new Error("Failed to fetch verification data");
             }
@@ -83,6 +89,7 @@ export default function VerifyPage() {
                       }
                     : undefined,
                 final_prompt: verificationData.final_prompt || "No prompt available",
+                prompt_meta: verificationData.prompt_meta,
             });
         } catch (err) {
             console.error("Error loading verification data:", err);
@@ -90,6 +97,14 @@ export default function VerifyPage() {
         } finally {
             setLoading(false);
         }
+    }, [websiteSlug, mode]);
+
+    useEffect(() => {
+        loadVerificationData(mode);
+    }, [websiteSlug, mode]);
+
+    const handleModeChange = (newMode: DemoMode) => {
+        setMode(newMode);
     };
 
     const copyToClipboard = async (text: string) => {
@@ -155,15 +170,41 @@ export default function VerifyPage() {
                                 </Badge>
                             </p>
                         </div>
-                        <div className="flex space-x-3">
+                        <div className="flex items-center space-x-3">
+                            {/* Mode Toggle */}
+                            <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                                <button
+                                    onClick={() => handleModeChange("screenshot")}
+                                    className={`flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                                        mode === "screenshot"
+                                            ? "bg-white text-gray-900 shadow-sm"
+                                            : "text-gray-600 hover:text-gray-900"
+                                    }`}
+                                >
+                                    <Camera className="h-4 w-4 mr-1.5" />
+                                    Screenshot
+                                </button>
+                                <button
+                                    onClick={() => handleModeChange("live")}
+                                    className={`flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                                        mode === "live"
+                                            ? "bg-white text-gray-900 shadow-sm"
+                                            : "text-gray-600 hover:text-gray-900"
+                                    }`}
+                                >
+                                    <Monitor className="h-4 w-4 mr-1.5" />
+                                    Live Browser
+                                </button>
+                            </div>
                             <Button
-                                onClick={() => window.open(`/agent-demo?website=${websiteSlug}`, "_blank")}
+                                onClick={() => window.open(`/agent-demo?website=${websiteSlug}&mode=${mode}`, "_blank")}
                                 className="bg-green-600 hover:bg-green-700"
                             >
                                 <Eye className="h-4 w-4 mr-2" />
                                 Test Agent
                             </Button>
-                            <Button onClick={loadVerificationData} variant="outline">
+                            <Button onClick={() => loadVerificationData(mode)} variant="outline">
+                                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
                                 Refresh
                             </Button>
                         </div>
@@ -196,10 +237,22 @@ export default function VerifyPage() {
                         <Card>
                             <CardHeader>
                                 <div className="flex items-center justify-between">
-                                    <CardTitle className="flex items-center">
-                                        <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                                        Combined System Prompt
-                                    </CardTitle>
+                                    <div className="flex items-center gap-3">
+                                        <CardTitle className="flex items-center">
+                                            <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
+                                            Combined System Prompt
+                                        </CardTitle>
+                                        <Badge 
+                                            variant={mode === "live" ? "default" : "secondary"}
+                                            className={mode === "live" ? "bg-blue-600" : ""}
+                                        >
+                                            {mode === "live" ? (
+                                                <><Monitor className="h-3 w-3 mr-1" /> Live Browser</>
+                                            ) : (
+                                                <><Camera className="h-3 w-3 mr-1" /> Screenshot</>
+                                            )}
+                                        </Badge>
+                                    </div>
                                     <Button onClick={() => copyToClipboard(data.final_prompt)} variant="outline" size="sm">
                                         <Copy className="h-4 w-4 mr-2" />
                                         {copied ? "Copied!" : "Copy"}
@@ -207,11 +260,29 @@ export default function VerifyPage() {
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <ScrollArea className="h-96 w-full rounded-md border p-4">
+                                {/* Prompt Meta Info */}
+                                {data.prompt_meta && (
+                                    <div className="mb-4 flex items-center gap-4 text-sm">
+                                        <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-full">
+                                            <span className="text-gray-600">Mode:</span>
+                                            <span className="font-medium text-gray-900 capitalize">{data.prompt_meta.mode}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-full">
+                                            <span className="text-gray-600">Routes:</span>
+                                            <span className="font-medium text-gray-900">{data.prompt_meta.routeCount}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-full">
+                                            <span className="text-gray-600">Screenshots:</span>
+                                            <span className="font-medium text-gray-900">{data.prompt_meta.screenshotCount}</span>
+                                        </div>
+                                    </div>
+                                )}
+                                <ScrollArea className="h-[500px] w-full rounded-md border p-4 bg-gray-50">
                                     <pre className="whitespace-pre-wrap text-sm font-mono text-gray-900">{data.final_prompt}</pre>
                                 </ScrollArea>
                                 <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
                                     <span>Length: {data.final_prompt.length.toLocaleString()} characters</span>
+                                    <span>~{Math.ceil(data.final_prompt.length / 4)} tokens (estimate)</span>
                                     <span>Lines: {data.final_prompt.split("\n").length}</span>
                                 </div>
                             </CardContent>
@@ -360,24 +431,50 @@ export default function VerifyPage() {
                                 <CardContent>
                                     <div className="space-y-4">
                                         <div className="bg-gray-50 p-4 rounded-lg">
-                                            <h4 className="font-medium text-gray-900 mb-2">Combination Process:</h4>
-                                            <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700">
-                                                <li>Start with base system prompt content</li>
-                                                <li>Add website description if available</li>
-                                                <li>Include screenshot details (S3 keys, descriptions, annotations)</li>
-                                                <li>Combine all components into final prompt structure</li>
-                                                <li>Generate signed URLs for secure S3 access</li>
+                                            <h4 className="font-medium text-gray-900 mb-2">Prompt Composition (Current Mode: <span className="text-blue-600 capitalize">{mode}</span>)</h4>
+                                            <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
+                                                <li><strong>Base Prompt</strong> — Website-agnostic pre-sales methodology (public/prompts/base-prompt.md)</li>
+                                                <li><strong>Mode Instructions</strong> — {mode === "live" ? "Live browser control tools (public/prompts/live_mode.md)" : "Screenshot presentation guide (public/prompts/screenshot_mode.md)"}</li>
+                                                <li><strong>Website-Specific Prompt</strong> — Custom instructions from S3 (if configured)</li>
+                                                <li><strong>Navigation Routes</strong> — Dynamically generated from YAML config</li>
+                                                {mode === "screenshot" && <li><strong>Screenshot Catalog</strong> — Available views for screenshot_set_view()</li>}
+                                                <li><strong>Placeholder Replacement</strong> — {"{{WEBSITE_NAME}}, {{WEBSITE_SLUG}}, {{BASE_URL}}, etc."}</li>
                                             </ol>
                                         </div>
 
-                                        <div className="bg-blue-50 p-4 rounded-lg">
-                                            <h4 className="font-medium text-blue-900 mb-2">Key Information:</h4>
-                                            <ul className="list-disc list-inside space-y-1 text-sm text-blue-800">
-                                                <li>Each screenshot has a unique S3 key for secure access</li>
-                                                <li>Signed URLs expire after 1 hour for security</li>
-                                                <li>Annotations and descriptions provide context to the AI</li>
-                                                <li>Screenshots are ordered by sort_order in the final prompt</li>
-                                            </ul>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className={`p-4 rounded-lg ${mode === "screenshot" ? "bg-purple-50 border-2 border-purple-200" : "bg-gray-50"}`}>
+                                                <h4 className="font-medium text-purple-900 mb-2 flex items-center">
+                                                    <Camera className="h-4 w-4 mr-2" />
+                                                    Screenshot Mode
+                                                </h4>
+                                                <ul className="list-disc list-inside space-y-1 text-sm text-purple-800">
+                                                    <li>screenshot_set_view(name)</li>
+                                                    <li>screenshot_list_views()</li>
+                                                    <li>switch_demo_mode(&apos;live&apos;)</li>
+                                                    <li>Pre-captured static images</li>
+                                                </ul>
+                                            </div>
+                                            <div className={`p-4 rounded-lg ${mode === "live" ? "bg-blue-50 border-2 border-blue-200" : "bg-gray-50"}`}>
+                                                <h4 className="font-medium text-blue-900 mb-2 flex items-center">
+                                                    <Monitor className="h-4 w-4 mr-2" />
+                                                    Live Browser Mode
+                                                </h4>
+                                                <ul className="list-disc list-inside space-y-1 text-sm text-blue-800">
+                                                    <li>browser_navigate, browser_click</li>
+                                                    <li>browser_type, browser_get_state</li>
+                                                    <li>switch_demo_mode(&apos;screenshot&apos;)</li>
+                                                    <li>Real-time browser control</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-green-50 p-4 rounded-lg">
+                                            <h4 className="font-medium text-green-900 mb-2">Mode Switching:</h4>
+                                            <p className="text-sm text-green-800">
+                                                Both modes include instructions for seamless switching. The agent can transition between 
+                                                live browser and screenshots mid-demo without interrupting the user experience.
+                                            </p>
                                         </div>
                                     </div>
                                 </CardContent>

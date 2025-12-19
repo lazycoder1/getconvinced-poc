@@ -467,9 +467,9 @@ export class BrowserController {
   /**
    * Get compact page state (AI-optimized)
    */
-  async getStateCompact(): Promise<PageStateCompact> {
+  async getStateCompact(options?: PageStateOptions): Promise<PageStateCompact> {
     const page = this.getPage();
-    return extractPageStateCompact(page);
+    return extractPageStateCompact(page, options);
   }
 
   /**

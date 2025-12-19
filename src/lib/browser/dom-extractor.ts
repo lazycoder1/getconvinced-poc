@@ -1,19 +1,19 @@
 import type { Page, Frame } from 'playwright';
-import type { 
-  InteractiveElement, 
-  PageState, 
-  PageStateOptions, 
-  PageStateLite, 
+import type {
+  InteractiveElement,
+  PageState,
+  PageStateOptions,
+  PageStateLite,
   PageStateCompact,
-  TableSummary 
+  TableSummary
 } from './types';
 
 // Default limits for page state extraction
 export const DEFAULT_STATE_OPTIONS: Required<PageStateOptions> = {
   lite: false,
-  maxElements: 75,
-  maxHtmlLength: 30000,
-  maxTextLength: 3000,
+  maxElements: 200, // Increased to capture more of the page
+  maxHtmlLength: 50000, // Increased for more detail
+  maxTextLength: 5000,
   includeIframes: false,
 };
 
@@ -102,7 +102,11 @@ export async function extractPageStateLite(page: Page | Frame): Promise<PageStat
 /**
  * Compact state optimized for AI - groups elements by type, extracts table data
  */
-export async function extractPageStateCompact(page: Page | Frame): Promise<PageStateCompact> {
+export async function extractPageStateCompact(
+  page: Page | Frame,
+  options: PageStateOptions = {}
+): Promise<PageStateCompact> {
+  const opts = { ...DEFAULT_STATE_OPTIONS, ...options };
   const [url, title] = await Promise.all([
     page.url(),
     page.title(),
@@ -112,6 +116,7 @@ export async function extractPageStateCompact(page: Page | Frame): Promise<PageS
     (function() {
       const selector = ${JSON.stringify(INTERACTIVE_SELECTORS)};
       const viewport = { width: window.innerWidth, height: window.innerHeight };
+      const maxEl = ${opts.maxElements};
 
       const buttons = [];
       const links = [];
@@ -296,10 +301,10 @@ export async function extractPageStateCompact(page: Page | Frame): Promise<PageS
       summary = summary.trim().substring(0, 500);
 
       return {
-        buttons: buttons.slice(0, 25),
-        links: links.slice(0, 25),
-        inputs: inputs.slice(0, 20),
-        other: other.slice(0, 15),
+        buttons,  // No truncation - return all buttons
+        links,    // No truncation - return all links
+        inputs,   // No truncation - return all inputs
+        other,    // No truncation - return all other elements
         tables,
         summary
       };

@@ -29,6 +29,17 @@ export { BrowserController } from './controller';
 export { SessionManager, getGlobalSessionManager, resetGlobalSessionManager } from './session';
 export { BrowserLogger, getBrowserLogger, resetBrowserLogger } from './logger';
 
+// HubSpot configuration
+export {
+  HUBSPOT_CONFIG,
+  HUBSPOT_ROUTES,
+  HUBSPOT_ROUTE_KEYS,
+  getHubSpotUrl,
+  PAIN_POINT_ROUTES,
+  SCREENSHOT_ROUTE_MAP,
+} from './hubspot-config';
+export type { HubSpotRouteKey } from './hubspot-config';
+
 // DOM extraction utilities
 export { 
   extractPageState, 

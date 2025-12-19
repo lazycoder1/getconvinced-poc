@@ -24,8 +24,42 @@ model Website {
   // Relations
   screenshots     Screenshot[]
   system_prompts  SystemPrompt[]
+  config          WebsiteConfig?
 
   @@map("websites")
+}
+
+// Website configuration (browser, navigation, cookies, voice settings)
+model WebsiteConfig {
+  id              String   @id @default(uuid()) @db.Uuid
+  website_id      String   @unique @db.Uuid
+  
+  // Base URLs
+  base_url        String   @db.VarChar(500)           // e.g., "https://app.salesforce.com"
+  default_url     String?  @db.VarChar(500)           // Start page after auth
+  portal_id       String?  @db.VarChar(100)           // For {{PORTAL_ID}} substitution
+  auth_domain     String?  @db.VarChar(200)           // Cookie filter domain
+  
+  // Navigation config (stored as parsed YAML)
+  nav_yaml_raw    String?  @db.Text                   // Original YAML input
+  nav_routes_json Json?    @db.JsonB                  // Parsed routes
+  
+  // Cookie storage
+  cookies_json    Json?    @db.JsonB
+  cookies_updated DateTime? @db.Timestamp(6)
+  
+  // Voice settings
+  voice_type      String   @default("alloy") @db.VarChar(50)
+  model           String   @default("gpt-4o-realtime-preview") @db.VarChar(100)
+  default_mode    String   @default("screenshot") @db.VarChar(20)
+  
+  created_at      DateTime @default(now()) @db.Timestamp(6)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  // Relations
+  website         Website  @relation(fields: [website_id], references: [id], onDelete: Cascade)
+  
+  @@map("website_configs")
 }
 
 // Screenshots table

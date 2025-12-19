@@ -10,7 +10,7 @@ import { StatsCard } from "@/components/ui/stats-card";
 import { QuickActionButton } from "@/components/ui/quick-action-button";
 import { SectionCard } from "@/components/ui/section-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Globe, Eye, Settings, Image, FileText, Copy, ExternalLink, Calendar, CheckCircle, Mic } from "lucide-react";
+import { Globe, Eye, Settings, Image, FileText, Copy, ExternalLink, Calendar, CheckCircle, Mic, Wrench, Navigation } from "lucide-react";
 
 interface Website {
     id: string;
@@ -120,6 +120,12 @@ export default function WebsiteDetailPage() {
                                 Test Agent
                             </Button>
                         </Link>
+                        <Link href={`/dashboard/websites/${website.slug}/setup`}>
+                            <Button variant="outline">
+                                <Wrench className="mr-2 w-4 h-4" />
+                                Setup
+                            </Button>
+                        </Link>
                         <Button variant="outline">
                             <Settings className="mr-2 w-4 h-4" />
                             Settings
@@ -186,6 +192,9 @@ export default function WebsiteDetailPage() {
                                 <CardTitle>Quick Actions</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-3">
+                                <QuickActionButton href={`/dashboard/websites/${website.slug}/setup`} icon={Wrench}>
+                                    Website Setup (Browser, Navigation, Auth)
+                                </QuickActionButton>
                                 <QuickActionButton href={`/dashboard/websites/${website.slug}/verify`} icon={Eye}>
                                     Verify Final Prompt
                                 </QuickActionButton>

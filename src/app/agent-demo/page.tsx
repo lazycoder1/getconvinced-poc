@@ -43,6 +43,11 @@ interface AgentConfig {
         voice: string;
         model: string;
     };
+    browser_config?: {
+        navigation_routes: any[];
+        base_url: string;
+        default_url?: string;
+    };
     timestamp: string;
 }
 
@@ -71,6 +76,7 @@ function AgentDemoPageContent() {
     const [activeScreenshot, setActiveScreenshot] = useState<Screenshot | null>(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
     const agentRef = React.useRef<RealtimeVoiceAgentHandle | null>(null);
+    const logsEndRef = React.useRef<HTMLDivElement | null>(null);
     const [agentStatus, setAgentStatus] = useState({
         isInitialized: false,
         isInitializing: false,
@@ -92,6 +98,11 @@ function AgentDemoPageContent() {
 
         return unsubscribe;
     }, []);
+
+    // Auto-scroll logs to bottom when new messages arrive
+    useEffect(() => {
+        logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [debugMessages]);
 
     useEffect(() => {
         const loadConfiguration = async () => {
@@ -205,9 +216,9 @@ function AgentDemoPageContent() {
     }
 
     return (
-        <div className="flex min-h-screen bg-gray-50">
+        <div className="flex h-screen overflow-hidden bg-gray-50">
             {/* Main Content */}
-            <div className="flex flex-col flex-1">
+            <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
                 {/* Simple Header */}
                 <div className="px-6 py-4 bg-white border-b border-gray-200">
                     <div className="flex justify-between items-center">
@@ -229,8 +240,8 @@ function AgentDemoPageContent() {
                     </div>
                 </div>
 
-                {/* Content Area */}
-                <div className="flex flex-col flex-1 p-6 space-y-6">
+                {/* Content Area - Scrollable */}
+                <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
                     {/* Concept demo notice with Start/Stop at end */}
                     <div className="flex items-center justify-between p-3 text-sm text-yellow-900 bg-yellow-50 rounded-lg border border-yellow-200">
                         <div>
@@ -310,8 +321,10 @@ function AgentDemoPageContent() {
                             playwrightStatus={playwrightStatus}
                             onDebugMessage={handleDebugMessage}
                             screenshots={agentConfig?.screenshots}
+                            browserConfig={agentConfig?.browser_config}
                             agentName={`${websiteSlug} Assistant`}
-                            websiteName={websiteSlug}
+                            websiteName={websiteDisplayName}
+                            websiteSlug={websiteSlug}
                             useDynamicConfig={true}
                             hideHeader={true}
                             hideControlButton={true}
@@ -418,14 +431,15 @@ function AgentDemoPageContent() {
                 </div>
             </div>
 
-            {/* Collapsible Debug Panel */}
+            {/* Collapsible Debug Panel - Fixed to screen height */}
             <div
-                className={`debug-panel relative z-10 bg-white border-l border-gray-200 transition-all duration-300 ${
+                className={`debug-panel relative z-10 bg-white border-l border-gray-200 transition-all duration-300 flex flex-col flex-shrink-0 overflow-hidden ${
                     sidebarCollapsed ? "w-12" : "w-80"
                 }`}
+                style={{ height: "100vh" }}
             >
                 {/* Sidebar Header */}
-                <div className="p-4 border-b border-gray-200">
+                <div className="flex-shrink-0 p-4 border-b border-gray-200">
                     {sidebarCollapsed ? (
                         <Button
                             variant="ghost"
@@ -453,30 +467,74 @@ function AgentDemoPageContent() {
 
                 {/* Debug Content */}
                 {!sidebarCollapsed && (
-                    <div className="p-4 h-full">
-                        {/* Debug Messages */}
-                        {debugMessages.length > 0 ? (
-                            <div className="h-full">
-                                <h4 className="mb-2 font-medium text-gray-900">Recent Activity</h4>
-                                <div className="overflow-y-auto space-y-2 max-h-full">
-                                    {debugMessages.slice(-10).map((msg, index) => (
-                                        <div key={index} className="p-2 text-xs bg-gray-100 rounded">
-                                            <span className="text-gray-500">[{msg.timestamp.toLocaleTimeString()}]</span>
-                                            <span className="text-blue-600"> {msg.source}:</span>
-                                            <span className="text-gray-700"> {msg.message}</span>
+                    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-white">
+                        {/* Header */}
+                        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                            <h4 className="font-semibold text-gray-900 text-sm">Logs ({debugMessages.length})</h4>
+                            <button 
+                                onClick={() => setDebugMessages([])}
+                                className="text-xs px-2 py-1 rounded text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                        
+                        {/* Messages - Scrollable */}
+                        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+                            {debugMessages.length > 0 ? (
+                                debugMessages.map((msg, index) => {
+                                    const isError = msg.source === "error" || msg.message.toLowerCase().includes("error") || msg.message.includes("❌");
+                                    const isTool = msg.source === "tool" || msg.message.includes("TOOL") || msg.message.includes("🔧");
+                                    const isUser = msg.message.includes("🧑 You:");
+                                    const isAssistant = msg.message.includes("🗣️ Assistant:");
+                                    
+                                    const borderClass = isError ? "border-l-red-500" : 
+                                                       isTool ? "border-l-indigo-500" : 
+                                                       isUser ? "border-l-blue-500" :
+                                                       isAssistant ? "border-l-emerald-500" : 
+                                                       "border-l-gray-400";
+                                    const bgClass = isError ? "bg-red-50" : 
+                                                   isTool ? "bg-indigo-50" : 
+                                                   isUser ? "bg-blue-50" :
+                                                   isAssistant ? "bg-emerald-50" : 
+                                                   "bg-gray-50";
+                                    const labelClass = isError ? "text-red-600" : 
+                                                      isTool ? "text-indigo-600" : 
+                                                      isUser ? "text-blue-600" :
+                                                      isAssistant ? "text-emerald-600" : 
+                                                      "text-gray-500";
+                                    
+                                    return (
+                                        <div 
+                                            key={index} 
+                                            className={`rounded-lg p-2 border-l-4 ${borderClass} ${bgClass}`}
+                                        >
+                                            <div className="flex items-center gap-2 text-xs mb-1">
+                                                <span className="text-gray-400 font-mono">
+                                                    {msg.timestamp.toLocaleTimeString()}
+                                                </span>
+                                                <span className={`font-semibold ${labelClass}`}>
+                                                    {msg.source}
+                                                </span>
+                                            </div>
+                                            <pre className="font-mono text-xs text-gray-700 whitespace-pre-wrap break-all m-0">
+                                                {msg.message}
+                                            </pre>
                                         </div>
-                                    ))}
+                                    );
+                                })
+                            ) : (
+                                <div className="flex justify-center items-center h-full text-gray-400">
+                                    <div className="text-center">
+                                        <MessageSquare className="mx-auto mb-2 w-8 h-8 opacity-30" />
+                                        <p className="text-sm">No logs yet</p>
+                                        <p className="text-xs text-gray-400">Start the voice agent to see activity</p>
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="flex justify-center items-center h-full text-gray-500">
-                                <div className="text-center">
-                                    <MessageSquare className="mx-auto mb-2 w-8 h-8" />
-                                    <p className="text-sm">No debug messages yet</p>
-                                    <p className="text-xs">Start the voice agent to see activity</p>
-                                </div>
-                            </div>
-                        )}
+                            )}
+                            {/* Auto-scroll anchor */}
+                            <div ref={logsEndRef} />
+                        </div>
                     </div>
                 )}
             </div>

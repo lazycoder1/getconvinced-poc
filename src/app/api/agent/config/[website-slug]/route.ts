@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getWebsiteConfig, buildCombinedPrompt } from '@/lib/prompt-builder';
+import { getWebsiteConfig, buildFullPrompt } from '@/lib/prompt-builder';
+import { prisma } from '@/lib/database';
+import { ParsedRoute } from '@/lib/navigation-parser';
 
 export async function GET(
     request: NextRequest,
@@ -8,6 +10,8 @@ export async function GET(
     try {
         const resolvedParams = await params;
         const websiteSlug = resolvedParams['website-slug'];
+        const searchParams = request.nextUrl.searchParams;
+        const mode = searchParams.get('mode') || 'screenshot'; // 'screenshot' or 'live'
 
         if (!websiteSlug) {
             return NextResponse.json(
@@ -26,43 +30,59 @@ export async function GET(
             );
         }
 
-        // Build the combined prompt with fallback
-        let combinedPrompt = '# Default Agent Instructions\n\nYou are an AI assistant that helps users navigate and understand software applications. You have access to screenshots and specific instructions for each application you support.\n\n## General Guidelines\n- Always reference the screenshots provided to you when explaining features\n- Be patient and explain concepts clearly\n- Provide step-by-step guidance\n- Ask for clarification when needed\n- Use the application\'s terminology appropriately\n\n## Screenshot Usage\n- Screenshots are provided to help you understand the current interface\n- Reference specific elements in screenshots when guiding users\n- Use visual cues from screenshots to explain where to click or what to look for\n\n## Communication Style\n- Professional but friendly\n- Clear and concise\n- Visual when possible\n- Action-oriented guidance\n\nRemember to reference the screenshots provided to help users visually navigate the interface.';
+        // Get website config for voice settings and navigation routes
+        const websiteWithConfig = await prisma.website.findUnique({
+            where: { slug: websiteSlug },
+            include: {
+                config: true
+            }
+        }) as any; // Cast to any to avoid Prisma include typing issues
+
+        // Build the combined prompt with mode-aware unified builder
+        let combinedPrompt = '';
+        let navigationRoutes: ParsedRoute[] = [];
+        let baseUrl = '';
 
         try {
-            combinedPrompt = await buildCombinedPrompt(websiteSlug);
+            // Use the new unified prompt builder
+            const result = await buildFullPrompt(websiteSlug, mode as any);
+            combinedPrompt = result.prompt;
+            navigationRoutes = result.routes;
+            baseUrl = result.baseUrl;
         } catch (error) {
-            console.warn('Failed to build combined prompt, using fallback:', error);
-
-            // Try to load the system prompt content directly from S3
-            if (config.system_prompt?.s3_key) {
-                try {
-                    const { loadPromptFromS3 } = await import('@/lib/prompt-builder');
-                    const directPrompt = await loadPromptFromS3(config.system_prompt.s3_key);
-                    combinedPrompt = `${combinedPrompt}\n\n---\n\nWEBSITE-SPECIFIC CONFIGURATION:\n${directPrompt}`;
-                } catch (s3Error) {
-                    console.warn('Failed to load direct prompt from S3:', s3Error);
-                    // Note: system_prompt doesn't have a content field - content is in S3
-                    console.warn('No fallback content available - system prompt content is only in S3');
-                }
-            }
+            console.warn('Failed to build full prompt, using basic fallback:', error);
+            combinedPrompt = '# Default Agent Instructions\n\nYou are an AI assistant specialized in demoing software.';
         }
+
+        // Get voice config from database or use defaults
+        const voiceConfig = {
+            voice: websiteWithConfig?.config?.voice_type || 'alloy',
+            model: websiteWithConfig?.config?.model || 'gpt-4o-realtime-preview-2025-06-03'
+        };
 
         // Return the complete configuration
         const agentConfig = {
             website: config.website,
             system_prompt: combinedPrompt,
-            screenshots: config.screenshots.sort((a, b) => {
+            screenshots: config.screenshots.sort((a: any, b: any) => {
                 // Default screenshot comes first, then by sort_order, then by created_at
                 if (a.is_default && !b.is_default) return -1;
                 if (!a.is_default && b.is_default) return 1;
                 if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
                 return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
             }),
-            voice_config: {
-                voice: 'alloy',
-                model: 'gpt-4o-realtime-preview-2025-06-03'
-            },
+            voice_config: voiceConfig,
+            // Always provide browser config if routes are available, so agent has the tools
+            browser_config: navigationRoutes.length > 0 || baseUrl ? {
+                navigation_routes: navigationRoutes,
+                base_url: baseUrl,
+                default_url: websiteWithConfig?.config?.default_url || baseUrl,
+                has_cookies: !!(websiteWithConfig?.config?.cookies_json),
+                cookie_count: Array.isArray(websiteWithConfig?.config?.cookies_json)
+                    ? websiteWithConfig.config.cookies_json.length
+                    : 0,
+            } : undefined,
+            mode,
             timestamp: new Date().toISOString()
         };
 

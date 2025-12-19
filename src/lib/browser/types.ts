@@ -34,7 +34,7 @@ export const KeyAction = z.object({
 export const ScrollAction = z.object({
   type: z.literal('scroll'),
   direction: z.enum(['up', 'down', 'left', 'right']),
-  amount: z.number().optional(),
+  amount: z.number().optional().nullable(),
 });
 
 export const ScrollToAction = z.object({

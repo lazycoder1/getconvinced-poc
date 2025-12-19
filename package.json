@@ -15,6 +15,7 @@
         "s3:upload-screenshots": "node scripts/upload-screenshots.js",
         "s3:upload-prompts": "node scripts/upload-prompts.js",
         "test-connections": "tsx test-connections.ts",
+        "test-browser": "tsx scripts/test-browser.ts",
         "dashboard:setup": "npm run db:generate && npm run db:setup && npm run s3:upload-screenshots && npm run s3:upload-prompts"
     },
     "dependencies": {
@@ -31,6 +32,7 @@
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "dotenv": "^17.2.1",
+        "js-yaml": "^4.1.1",
         "lucide-react": "^0.469.0",
         "next": "15.4.3",
         "openai": "^5.11.0",
@@ -47,6 +49,7 @@
     "devDependencies": {
         "@eslint/eslintrc": "^3",
         "@tailwindcss/postcss": "^4",
+        "@types/js-yaml": "^4.0.9",
         "@types/node": "^20.19.9",
         "@types/react": "^19",
         "@types/react-dom": "^19",

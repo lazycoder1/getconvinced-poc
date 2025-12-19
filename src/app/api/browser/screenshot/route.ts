@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     logger.logResponse('screenshot', { size: buffer.length }, Date.now() - start);
 
     if (format === 'binary') {
-      return new NextResponse(buffer, {
+      return new NextResponse(new Uint8Array(buffer), {
         status: 200,
         headers: {
           'Content-Type': 'image/png',
@@ -84,7 +84,7 @@ export async function GET() {
 
     logger.logResponse('screenshot', { size: buffer.length }, Date.now() - start);
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
         'Content-Type': 'image/png',

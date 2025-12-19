@@ -1,0 +1,162 @@
+[
+  {
+    "name": "laboratory-anonymous-id",
+    "value": "anon07bd9168ca3382b334ab3aa10a1a",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "hs_c2l",
+    "value": "GNPP6VciGQAQstEnjf1ziSfDanybEVAXSYOPyBTOtvs",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "hs_login_email",
+    "value": "gautamgsabhahit@gmail.com",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": 1797603797.389542,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "messagesUtk",
+    "value": "202adfbbab6d4acba5915c31b377e199",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "hs_login_metadata",
+    "value": "%7B%22ungatedForLoginV4%22%3Atrue%2C%22showABTestVariant%22%3Afalse%2C%22isMobileLogin%22%3Afalse%7D",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": 1797603797.389599,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "__hs_cookie_cat_pref",
+    "value": "1:true_2:true_3:true",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": 1781187218,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "__cf_bm",
+    "value": "xKreeW1IT_XmwycZhCyqfqD4b7tNydRZGEKzMKcWxJ8-1766067768-1.0.1.1-kQB4WpmqRcDWKlzQi96eXwh3VWZOHaHnHNhLPAZbmIBfLm6zA13nbRflA3NABG8n_iLJncB0XHrxrjiyOSvTxCXfLsfdf5esHQIgc6F06fs",
+    "domain": ".www.hubspot.com",
+    "path": "/",
+    "expires": 1766069568.775586,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "_cfuvid",
+    "value": "7ZFwH7UPRLq4DX_SQaFN.fMTjMcmcPqOSWdNyA7MQq0-1766067768754-0.0.1.1-604800000",
+    "domain": ".www.hubspot.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "hubspotapi",
+    "value": "AAccUftmnZ68tpUfawWHgSov0deu_2hQ8qTz4saQdRDIygxipvRx2DkroW6Aot-BmSLJsB4TpGuDRO7pBbrmEsek7_7CRfVlSKLycKe_hlowQgnaBq0QklBKImTH6YyMEaqbjU3EkHReRiRUpISQyjmVLeyaMXHXKV_XZjMxhLRbDr8N5k1l-gAXPnhleZBNzFL2U6aRImS4HyT4x0-hDf4ZYDZ8rPBTlkvq63O9Bu4KR6EcHm1hhIEZBad6JpJKBQA5RKSieDPwI0Kfc2ZMWbkdNNGF3NxctgH7KY55SPHqjZjYM5VLKn38-Y_89MUykGB3ptTRSfJKhupjAtaOqszsiEqX3o2_iFSXCvspW6MI-dtX4-k-4EuGpmRbEwKELY9mzbYbB7hMV5If6sESlA9FzdKGqq_QEkeos4nqGHcpTxep-uPHJO7e8579bd4ZmMhdmuD7SRlDWUr0I0s-1G7TrArLBjgbobqbaJ6-h6njPWOJp3bIFUVKhYJDvb753DhkyQSBMRWKXQJyngnSyTD_m7J6L_cDakKAc1zSlCTjTRb33Vp-SwFnpCBpnAfBhQiSZpA43WXsoJo5kqtxizPhBfJujtov_PAhZ35zkJUEnVgGpvMy_NaThx2rlUTZ4ze9kxdLOUXERiZF_TGLhX7DJEXfkERWtOT_oYwZvh6n2fManf9bJDLwniQZlbiagi18TCEYY7KzSVf3Fm1c417c7L8k5wdI7fu098c0f-Q3GPRMpxvlhBwXVEUDQjnWWbJoRuJOap_2eDN54GBVcSK9gzP41RwA5gO4tXTlE510P4fie9SP_swaefSppd-zWstS14F_P9j-Uo3mw9qqG-DI9laR_O-XpjD828ltb1ThxZQNeZASg9EyAVfhYK58ky4FenVXBFyho4dMnKDf4tN1NwITUyCaJZkKM_594IB26pE-_0qN697T2ykBUTBIbuVAYsRjopH7opSIt_OjsGjEUS7LAxc1BTpAYf_So76NVx7m_rkho8zCEIyxfI5n1xdmsRMJ4hE8Pcr18_rxabPUW1_ff64R-LyXjYESpuTS3eM13IpS8hA_WkzIIRWikbvUCHJO2lRwvHjoLRLKw1FyiApLAodT4dSI0We_aZkdFdpo9EUAhp9B9BF62CUmnkzBCwxiTEwOdzOH-qn_X0bO7TCWb1DSDpQ_OxYvXQ-VLut5CfV-MfgPGFaKyY--ez9CG81Tlr6wEzrn_jBAJASPzq8sILlyfruZ5TE3F6z82apkysi8J9kp7Mgave0AAe9I9X5zNBZchLdeWjp_d3UfVfMrVSTleE2kxYwMOF1KshcB4XhCJPf2fzdiEqkQ5WwFQoAkv6vkkZnhj0iD_RbYm7OklqLfXeOAD74CfmjI1EDxbdudgMPltmpDd5WLs3HQTUm3Oscpi3o74XBDZ30yqKZRIkId9PrnayPwdJKb8yBoLVU6s_UXYZb9h8o-mdwpQ1w0fi7pwGplvey7ZrZtHPP1b7UyPA",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": 1768486997.389115,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "hubspotapi-prefs",
+    "value": "1",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": 1797603797.389263,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "hubspotapi-csrf",
+    "value": "AAccUfsSJ2COa17KFu3rm2iyJMowOudE577FCvyG4RvZtv-8gtMqMyecr5c7gBHyuCdf_Nh_uLQRCqDlorApYhCWADv7qqVNGw",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": 1797603797.389329,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "hubspotapi-lax",
+    "value": "AAccUfu_ulHzGHN8A58Mkgyhx-4qyB_6bQfJaeKSuksU0yMPej_9AfCLjA3X7nUKK77p7Iz_sWR27h6RiGFGu3CdLOnYjk7-KQ",
+    "domain": ".app.hubspot.com",
+    "path": "/",
+    "expires": 1768486997.389412,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "hubspotapi-strict",
+    "value": "AAccUfuq_lhitaY2Acqg-KQKBlYnPiRu5LKJ6D3kAHUEMnsUw5vwEeudzvUs-xt0zCKKAzkGHf4Wh1HtUE_cHaHxm1fzrP4S1A",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": 1768486997.389484,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Strict"
+  },
+  {
+    "name": "csrf.app",
+    "value": "AAccUfsSJ2COa17KFu3rm2iyJMowOudE577FCvyG4RvZtv-8gtMqMyecr5c7gBHyuCdf_Nh_uLQRCqDlorApYhCWADv7qqVNGw",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": 1797603797,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "__cf_bm",
+    "value": "ykR5.kSeSlFyTCRFWfq6kgIbmdq3nZjpF5efHwyArLg-1766067823-1.0.1.1-H9dBuWijco5q5wanFfMKkc_0wLK7pxCnskZdfO2FlYMU_i1DhDBNWM3EulHFobeaFIoUOYLbwDPSsDwD9GLBX4KYs_CYpwJU8S1mSFGPoao",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": 1766069623.975434,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "_cfuvid",
+    "value": "yKsxRnwomfo42C_MjU3cU44WshhC4anAYdO23as5DL0-1766067823969-0.0.1.1-604800000",
+    "domain": ".hubspot.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  }
+]

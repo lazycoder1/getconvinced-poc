@@ -112,25 +112,30 @@ export class SessionManager {
 // Global Session Manager Singleton
 // ============================================================================
 
-let globalSessionManager: SessionManager | null = null;
+// Use globalThis to persist across Next.js hot reloads
+declare global {
+  // eslint-disable-next-line no-var
+  var __browserSessionManager: SessionManager | undefined;
+}
 
 /**
  * Get the global session manager singleton
+ * Uses globalThis to survive Next.js hot module replacement
  */
 export function getGlobalSessionManager(): SessionManager {
-  if (!globalSessionManager) {
-    globalSessionManager = new SessionManager();
+  if (!globalThis.__browserSessionManager) {
+    globalThis.__browserSessionManager = new SessionManager();
   }
-  return globalSessionManager;
+  return globalThis.__browserSessionManager;
 }
 
 /**
  * Reset the global session manager (useful for testing)
  */
 export async function resetGlobalSessionManager(): Promise<void> {
-  if (globalSessionManager && globalSessionManager.hasSession()) {
-    await globalSessionManager.closeSession();
+  if (globalThis.__browserSessionManager?.hasSession()) {
+    await globalThis.__browserSessionManager.closeSession();
   }
-  globalSessionManager = null;
+  globalThis.__browserSessionManager = undefined;
 }
 

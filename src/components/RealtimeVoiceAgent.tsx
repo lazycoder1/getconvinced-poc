@@ -4,6 +4,8 @@ import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperat
 import { Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { RealtimeAgent, RealtimeSession } from "@openai/agents/realtime";
 import createDynamicScreenshotTools from "@/lib/dynamic-screenshot-tools";
+import { createDynamicBrowserTools } from "@/lib/browser-tools";
+import { getDemoModeManager } from "@/lib/demo-mode";
 
 interface Screenshot {
     id: string;
@@ -13,6 +15,12 @@ interface Screenshot {
     description?: string;
     annotation?: string;
     sort_order: number;
+}
+
+interface BrowserConfig {
+    navigation_routes: any[];
+    base_url: string;
+    default_url?: string;
 }
 
 export interface RealtimeVoiceAgentHandle {
@@ -27,8 +35,10 @@ interface RealtimeVoiceAgentProps {
     // Optional dynamic configuration
     systemPrompt?: string; // Deprecated: instructions are now set server-side
     screenshots?: Screenshot[];
+    browserConfig?: BrowserConfig;
     agentName?: string;
     websiteName?: string;
+    websiteSlug?: string;
     // If true, use dynamic config; if false, use original hardcoded logic
     useDynamicConfig?: boolean;
     // If true, hide the header (title and status indicator)
@@ -51,8 +61,10 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
         onDebugMessage,
         systemPrompt,
         screenshots = [],
+        browserConfig,
         agentName = "HubSpot Assistant",
         websiteName = "hubspot",
+        websiteSlug = "hubspot",
         useDynamicConfig = false,
         hideHeader = false,
         hideControlButton = false,
@@ -83,7 +95,7 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
             setIsInitializing(true);
 
             try {
-                onDebugMessage("realtime", "🔑 Initializing OpenAI SDK...");
+                // SDK initialization - silent unless error
 
                 // Generate ephemeral token
                 const qs = new URLSearchParams();
@@ -102,7 +114,7 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
 
                 setEphemeralToken(tokenData.client_secret);
                 setIsInitialized(true);
-                onDebugMessage("realtime", "✅ SDK initialized successfully");
+                // SDK initialized - no log needed
             } catch (error: any) {
                 console.error("RealtimeVoiceAgent initialization error:", error);
                 setError(`🚨 SDK initialization failed: ${error.message}`);
@@ -129,22 +141,39 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
             let assistantName: string = agentName;
 
             // Do not send instructions from client; rely on server-configured session instructions
-            onDebugMessage("realtime", `📝 Using server-side instructions for ${websiteName}`);
+            // Skip logging server-side instructions - we know we're using them
 
-            // Create dynamic tools based on available screenshots
+            // Create dynamic tools based on available screenshots and browser config
             let dynamicTools: any[] = [];
+            let screenshotCount = 0;
+            let browserToolCount = 0;
 
-            if (useDynamicConfig && screenshots && screenshots.length > 0) {
-                // Use dynamic screenshot tools
-                dynamicTools = createDynamicScreenshotTools(screenshots);
-                onDebugMessage("realtime", `🛠️ Using dynamic screenshot tools (${dynamicTools.length} tools)`);
-            } else {
-                // Fallback to basic tools - could add other tools here if needed
-                dynamicTools = [];
-                onDebugMessage("realtime", `🛠️ Using minimal tools (no dynamic screenshots)`);
+            if (useDynamicConfig) {
+                // 1. Add screenshot tools if available
+                if (screenshots && screenshots.length > 0) {
+                    const screenshotTools = createDynamicScreenshotTools(screenshots);
+                    dynamicTools.push(...screenshotTools);
+                    screenshotCount = screenshotTools.length;
+                }
+
+                // 2. Add browser tools if config available
+                if (browserConfig && browserConfig.navigation_routes) {
+                    const browserTools = createDynamicBrowserTools(
+                        websiteSlug,
+                        websiteName,
+                        browserConfig.navigation_routes,
+                        browserConfig.base_url
+                    );
+                    dynamicTools.push(...browserTools);
+                    browserToolCount = browserTools.length;
+                }
             }
 
-            onDebugMessage("realtime", `🤖 Creating agent with ${dynamicTools.length} tools`);
+            // Single consolidated log for tool registration
+            onDebugMessage(
+                "realtime",
+                `🛠️ Tools: ${dynamicTools.length} total (${browserToolCount} browser, ${screenshotCount} screenshot)`
+            );
 
             const hubspotAgent: RealtimeAgent = new RealtimeAgent({
                 name: assistantName,
@@ -153,7 +182,7 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
                 tools: dynamicTools,
             });
 
-            onDebugMessage("realtime", `🎯 Creating session with model: gpt-4o-realtime-preview-2025-06-03`);
+            // Session creation logged below after connect
 
             // Create session with the agent
             const session = new RealtimeSession(hubspotAgent, {
@@ -173,29 +202,28 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
             // Hook up logging for inputs, outputs, and tool calls
             const safeTruncate = (value: string, max = 400) => (value.length > max ? value.slice(0, max) + "…" : value);
 
-            // Transport-level diagnostics to help debug silent failures / autoplay
+            // Transport-level diagnostics - only log errors (skip all the noisy session/audio events)
             try {
                 (session as any)?.transport?.on?.("*", (evt: any) => {
                     try {
                         const t = typeof evt?.type === "string" ? evt.type : "event";
-                        onDebugMessage("realtime", `🛰️ transport: ${t}`);
+                        // Only log actual errors, skip all other transport noise
+                        if (t.includes("error")) {
+                            onDebugMessage("error", `🚨 Transport error: ${t}`);
+                        }
                     } catch {}
                 });
             } catch {}
 
-            session.on("agent_start", () => {
-                onDebugMessage("realtime", "🤖 Agent started responding");
-            });
+            // Skip logging agent_start - it's noisy and we see tool calls anyway
+            // session.on("agent_start", () => { });
 
-            session.on("audio_start", () => {
-                onDebugMessage("realtime", "🔊 Audio started");
-            });
-            session.on("audio", () => {
-                onDebugMessage("realtime", "🔈 Audio chunk");
-            });
-            session.on("audio_stopped", () => {
-                onDebugMessage("realtime", "🔇 Audio stopped");
-            });
+            // Skip audio_start - noisy
+            // session.on("audio_start", () => { });
+            // Skip logging individual audio chunks - too noisy
+            // session.on("audio", () => { });
+            // Skip audio_stopped - noisy, we see the transcript anyway
+            // session.on("audio_stopped", () => { });
 
             session.on("agent_end", (_ctx, _agent, output) => {
                 if (output) {
@@ -206,23 +234,44 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
             session.on("agent_tool_start", (_ctx, _agent, tool, details) => {
                 const argsStr = (() => {
                     try {
-                        return JSON.stringify(details?.toolCall ?? {});
+                        const args = details?.toolCall ?? {};
+                        return JSON.stringify(args, null, 0);
                     } catch {
                         return "";
                     }
                 })();
-                onDebugMessage("realtime", `🛠️ Tool start: ${tool.name} ${safeTruncate(argsStr, 300)}`);
+                // More prominent tool logging
+                onDebugMessage("realtime", `🔧 TOOL CALL: ${tool.name}`);
+                if (argsStr && argsStr !== "{}") {
+                    onDebugMessage("realtime", `   📥 Args: ${argsStr}`);
+                }
             });
 
             session.on("agent_tool_end", (_ctx, _agent, tool, result, details) => {
-                const endStr = (() => {
+                const resultStr = (() => {
                     try {
-                        return result ?? JSON.stringify(details ?? {});
+                        // Try to parse the result if it's a string
+                        const parsed = typeof result === "string" ? JSON.parse(result) : result;
+                        // Show success/error status prominently
+                        if (parsed?.success === false) {
+                            return `❌ FAILED: ${parsed.error || JSON.stringify(parsed)}`;
+                        }
+                        // For successful results, show key info
+                        if (parsed?.url) {
+                            return `✅ → ${parsed.url}`;
+                        }
+                        if (parsed?.stats) {
+                            return `✅ ${parsed.stats}`;
+                        }
+                        if (parsed?.message) {
+                            return `✅ ${parsed.message}`;
+                        }
+                        return `✅ ${JSON.stringify(parsed).slice(0, 200)}`;
                     } catch {
-                        return String(result ?? "");
+                        return String(result ?? "").slice(0, 200);
                     }
                 })();
-                onDebugMessage("realtime", `✅ Tool end: ${tool.name} → ${safeTruncate(String(endStr), 300)}`);
+                onDebugMessage("realtime", `   📤 Result: ${resultStr}`);
             });
 
             session.on("tool_approval_requested", (_ctx, _agent, approval) => {
@@ -272,11 +321,7 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
                                 onDebugMessage("realtime", `🗣️ Assistant: ${safeTruncate(text)}`);
                             }
                         }
-                    } else if (item?.type === "function_call") {
-                        onDebugMessage("realtime", `🔧 Tool call: ${item.name}(${safeTruncate(item.arguments || "", 300)})`);
-                        if (item.output) {
-                            onDebugMessage("realtime", `🔎 Tool result: ${safeTruncate(item.output, 300)}`);
-                        }
+                        // Skip function_call logging here - we log via agent_tool_start/end with more detail
                     }
                 } catch (e) {
                     // Best-effort logging; don't break the UI
@@ -284,10 +329,7 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
                 }
             });
 
-            onDebugMessage("realtime", "🎤 Voice agent ready - connecting to OpenAI...");
-
             // Connect with ephemeral token
-            onDebugMessage("realtime", `🔑 Connecting with token: ${ephemeralToken.value.substring(0, 10)}...`);
             await session.connect({
                 apiKey: ephemeralToken.value,
                 // @ts-expect-error: initialSessionConfig is passed through to the transport layer
@@ -309,11 +351,10 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
             // Connection successful
             setIsConnected(true);
             setIsConnecting(false);
-            onDebugMessage("realtime", "✅ Connected to OpenAI Realtime API");
+            onDebugMessage("realtime", "✅ Connected - say 'Hello' to start");
             try {
                 await audioRef.current?.play();
             } catch {}
-            onDebugMessage("realtime", "🎤 Say 'Hello' to start your HubSpot consultation");
             // Apply current mic state (mute if requested) without stopping agent output
             try {
                 sessionRef.current?.mute(isMuted);
@@ -346,7 +387,7 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
         try {
             sessionRef.current?.mute(next);
         } catch {}
-        onDebugMessage("realtime", next ? "🎙️ Mic muted (input off)" : "🎙️ Mic unmuted (input on)");
+        // Skip mic mute logging - UI already shows state
     }, [isMuted, onDebugMessage]);
 
     const handleVoiceToggle = () => {
@@ -356,6 +397,42 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
             connectToRealtime();
         }
     };
+
+    // Sync mode changes to the agent session
+    useEffect(() => {
+        const manager = getDemoModeManager();
+        const unsubscribe = manager.subscribe((newMode) => {
+            if (isConnected && sessionRef.current) {
+                onDebugMessage("realtime", `🔄 Mode switched to: ${newMode}`);
+
+                // Fetch the new prompt for this mode to update session instructions if possible
+                // For now, we'll send a system message to the agent to notify it of the mode change
+                // This ensures the agent is aware of the change in its conversation history
+                try {
+                    // @ts-ignore - session.send is used to send control events
+                    sessionRef.current.send("conversation.item.create", {
+                        item: {
+                            type: "message",
+                            role: "system",
+                            content: [
+                                {
+                                    type: "input_text",
+                                    text: `CRITICAL: Mode has switched to ${newMode.toUpperCase()}. You must now follow the ${newMode.toUpperCase()} mode instructions from your system prompt.`,
+                                },
+                            ],
+                        },
+                    });
+
+                    // Trigger a response from the agent if they were in the middle of something
+                    // @ts-ignore
+                    sessionRef.current.send("response.create");
+                } catch (e) {
+                    console.warn("Failed to notify agent of mode switch", e);
+                }
+            }
+        });
+        return unsubscribe;
+    }, [isConnected, onDebugMessage]);
 
     // Expose imperative controls to parent
     useImperativeHandle(
