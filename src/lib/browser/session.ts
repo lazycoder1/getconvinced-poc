@@ -19,16 +19,14 @@ export class SessionManager {
 
   /**
    * Create a new browser session
+   * If a session already exists, attempts to reuse it (for Browserbase) or closes and recreates
    */
   async createSession(options?: BrowserControllerOptions): Promise<SessionInfo> {
-    if (this.session) {
-      throw new Error('Session already exists. Close it first.');
-    }
-
     // Check for Browserbase environment variables
     const useBrowserbase = process.env.USE_BROWSERBASE === 'true';
     const browserbaseApiKey = process.env.BROWSERBASE_API_KEY;
     const browserbaseProjectId = process.env.BROWSERBASE_PROJECT_ID;
+    const browserbaseRegion = process.env.BROWSERBASE_REGION || 'ap-southeast-1';
 
     // Merge Browserbase config with provided options
     const mergedOptions: BrowserControllerOptions = {
@@ -37,8 +35,37 @@ export class SessionManager {
       browserbaseConfig: options?.browserbaseConfig ?? (browserbaseApiKey && browserbaseProjectId ? {
         apiKey: browserbaseApiKey,
         projectId: browserbaseProjectId,
+        region: browserbaseRegion,
       } : undefined),
     };
+
+    // If a session already exists, try to reuse it (for Browserbase) or close it
+    if (this.session) {
+      // If it's a Browserbase session, try to reconnect
+      if (this.session.browserbaseSessionId && mergedOptions.useBrowserbase && mergedOptions.browserbaseConfig) {
+        try {
+          const reconnected = await this.session.controller.reconnectToBrowserbaseSession(this.session.browserbaseSessionId);
+          if (reconnected) {
+            console.log('Reusing existing Browserbase session');
+            return {
+              id: this.session.id,
+              createdAt: this.session.createdAt,
+              browserbaseSessionId: this.session.browserbaseSessionId,
+            };
+          }
+        } catch (error) {
+          console.log('Failed to reconnect to existing session, closing and creating new one:', error);
+        }
+      }
+      
+      // Close existing session if we can't reuse it
+      try {
+        await this.session.controller.close();
+      } catch (error) {
+        console.error('Error closing existing session:', error);
+      }
+      this.session = null;
+    }
 
     const id = crypto.randomUUID();
     const controller = new BrowserController(mergedOptions);

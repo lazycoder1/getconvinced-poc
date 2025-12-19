@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Globe, AlertCircle, Play, Square, Loader2, Save, X, Settings } from "lucide-react";
-import { HUBSPOT_CONFIG } from "@/lib/hubspot-client-config";
+import { HUBSPOT_CONFIG } from "@/lib/browser/hubspot-config";
+import type { ClickEvent } from "@/lib/browser";
 
 interface LiveBrowserViewerProps {
     onStatusChange?: (status: "disconnected" | "connecting" | "connected" | "error") => void;
@@ -43,6 +44,8 @@ export default function LiveBrowserViewer({
     const [isSavingCookies, setIsSavingCookies] = useState(false);
     const [liveViewUrl, setLiveViewUrl] = useState<string | null>(null);
     const [showToolbar, setShowToolbar] = useState(true);
+    const [clickEvents, setClickEvents] = useState<ClickEvent[]>([]);
+    const [showClickOverlay, setShowClickOverlay] = useState(true);
 
     const hasCheckedSessionRef = useRef(false);
     const onStatusChangeRef = useRef(onStatusChange);
@@ -97,6 +100,10 @@ export default function LiveBrowserViewer({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     headless: false,
+                    // Prefer DB cookies if available
+                    loadFromDb: !!websiteSlug,
+                    websiteSlug,
+                    // Keep legacy hubspot cookie loading as fallback (won't hurt if file doesn't exist)
                     loadHubspotCookies: loadHubspotCookies,
                 }),
             });
@@ -199,6 +206,40 @@ export default function LiveBrowserViewer({
         });
     }, [checkSession, updateStatus]);
 
+    // Poll for click events when connected
+    useEffect(() => {
+        if (status !== "connected" || !showClickOverlay) return;
+
+        let lastTimestamp = Date.now();
+        const pollInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`/api/browser/clicks?since=${lastTimestamp}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.clicks && data.clicks.length > 0) {
+                        setClickEvents((prev) => {
+                            const newClicks = data.clicks.filter((c: ClickEvent) => !prev.some((p) => p.timestamp === c.timestamp));
+                            return [...prev, ...newClicks].slice(-20); // Keep last 20
+                        });
+                        lastTimestamp = Math.max(...data.clicks.map((c: ClickEvent) => c.timestamp));
+                    }
+                }
+            } catch (err) {
+                // Silently fail - clicks are not critical
+            }
+        }, 200); // Poll every 200ms
+
+        // Clean up old click events (older than 3 seconds)
+        const cleanupInterval = setInterval(() => {
+            setClickEvents((prev) => prev.filter((c) => Date.now() - c.timestamp < 3000));
+        }, 500);
+
+        return () => {
+            clearInterval(pollInterval);
+            clearInterval(cleanupInterval);
+        };
+    }, [status, showClickOverlay]);
+
     // Connected state - Full browser with floating toolbar
     if (status === "connected" && liveViewUrl) {
         return (
@@ -210,6 +251,45 @@ export default function LiveBrowserViewer({
                     allow="clipboard-read; clipboard-write"
                     title="Live Browser Session"
                 />
+
+                {/* Click Overlay */}
+                {showClickOverlay && (
+                    <div className="absolute inset-0 pointer-events-none z-20">
+                        {clickEvents.map((click, index) => {
+                            // Fade out clicks after 2 seconds
+                            const age = Date.now() - click.timestamp;
+                            const opacity = Math.max(0, 1 - age / 2000);
+
+                            if (opacity <= 0) return null;
+
+                            return (
+                                <div
+                                    key={`${click.timestamp}-${index}`}
+                                    className="absolute"
+                                    style={{
+                                        left: `${click.x}px`,
+                                        top: `${click.y}px`,
+                                        transform: "translate(-50%, -50%)",
+                                        opacity,
+                                        transition: "opacity 0.1s",
+                                    }}
+                                >
+                                    {/* Ripple effect */}
+                                    <div className="relative w-8 h-8">
+                                        <div
+                                            className="absolute inset-0 rounded-full border-4 border-blue-500 bg-blue-500/20"
+                                            style={{
+                                                animation: "clickRipple 0.6s ease-out forwards",
+                                            }}
+                                        />
+                                        <div className="absolute inset-0 rounded-full bg-blue-500/40" />
+                                        <div className="absolute inset-2 rounded-full bg-blue-500" />
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* Floating toolbar */}
                 {showToolbar && (
@@ -239,6 +319,18 @@ export default function LiveBrowserViewer({
                         >
                             <Square className="w-4 h-4" />
                             Stop
+                        </button>
+
+                        {/* Toggle Click Overlay */}
+                        <button
+                            onClick={() => setShowClickOverlay(!showClickOverlay)}
+                            className={`p-1.5 transition-colors ${showClickOverlay ? "text-blue-400" : "text-gray-400 hover:text-white"}`}
+                            title={showClickOverlay ? "Hide click overlay" : "Show click overlay"}
+                        >
+                            <div className="relative w-4 h-4">
+                                <div className="absolute inset-0 rounded-full border-2 border-current" />
+                                <div className="absolute inset-1 rounded-full bg-current opacity-50" />
+                            </div>
                         </button>
 
                         {/* Hide toolbar */}

@@ -25,7 +25,7 @@
  */
 
 // Core classes
-export { BrowserController } from './controller';
+export { BrowserController, type ClickEvent } from './controller';
 export { SessionManager, getGlobalSessionManager, resetGlobalSessionManager } from './session';
 export { BrowserLogger, getBrowserLogger, resetBrowserLogger } from './logger';
 
@@ -41,45 +41,45 @@ export {
 export type { HubSpotRouteKey } from './hubspot-config';
 
 // DOM extraction utilities
-export { 
-  extractPageState, 
-  extractPageStateLite, 
+export {
+  extractPageState,
+  extractPageStateLite,
   extractPageStateCompact,
-  DEFAULT_STATE_OPTIONS 
+  DEFAULT_STATE_OPTIONS
 } from './dom-extractor';
 
 // Types
 export type {
   // Actions
   BrowserAction,
-  
+
   // Cookie types
   Cookie,
-  
+
   // Controller options
   BrowserControllerOptions,
   BrowserbaseConfig,
-  
+
   // Element types
   InteractiveElement,
   CompactElement,
-  
+
   // Page state types
   PageState,
   PageStateLite,
   PageStateCompact,
   PageStateOptions,
-  
+
   // Table types
   TableSummary,
   TableRow,
-  
+
   // Session types
   SessionInfo,
-  
+
   // Event types
   ServerEvent,
-  
+
   // Demo mode types
   DemoMode,
   DemoConfig,
@@ -98,7 +98,6 @@ export {
   SimpleAction,
   HoverAction,
   HoverElementAction,
-  SetCaptionAction,
   BrowserAction as BrowserActionSchema,
 } from './types';
 

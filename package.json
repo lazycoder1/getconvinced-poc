@@ -16,7 +16,12 @@
         "s3:upload-prompts": "node scripts/upload-prompts.js",
         "test-connections": "tsx test-connections.ts",
         "test-browser": "tsx scripts/test-browser.ts",
-        "dashboard:setup": "npm run db:generate && npm run db:setup && npm run s3:upload-screenshots && npm run s3:upload-prompts"
+        "dashboard:setup": "npm run db:generate && npm run db:setup && npm run s3:upload-screenshots && npm run s3:upload-prompts",
+        "sync:eleven-labs": "tsx scripts/sync-eleven-labs-agents.ts",
+        "sync:eleven-labs-tools": "tsx scripts/sync-eleven-labs-tools.ts",
+        "store:eleven-labs-agent": "tsx scripts/store-eleven-labs-agent-id.ts",
+        "generate:eleven-labs-prompt": "tsx scripts/generate-eleven-labs-prompt.ts",
+        "test:eleven-labs-tools": "tsx scripts/test-eleven-labs-tools.ts"
     },
     "dependencies": {
         "@aws-sdk/client-s3": "^3.873.0",
@@ -38,13 +43,14 @@
         "openai": "^5.11.0",
         "playwright": "^1.49.1",
         "posthog-js": "^1.260.3",
-        "posthog-node": "^5.8.0",
         "prisma": "^6.14.0",
         "react": "19.1.0",
         "react-dom": "19.1.0",
         "tailwind-merge": "^3.3.1",
         "ws": "^8.18.0",
-        "zod": "^3.25.67"
+        "zod": "^3.25.67",
+        "@elevenlabs/react": "^0.12.2",
+        "@elevenlabs/client": "^0.12.2"
     },
     "devDependencies": {
         "@eslint/eslintrc": "^3",

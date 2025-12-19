@@ -137,7 +137,7 @@ export default function VerifyPage() {
                             <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
                             <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Data</h2>
                             <p className="text-gray-600 mb-4">{error}</p>
-                            <Button onClick={loadVerificationData} variant="outline">
+                            <Button onClick={() => loadVerificationData()} variant="outline">
                                 Try Again
                             </Button>
                         </div>

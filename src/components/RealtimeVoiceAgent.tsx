@@ -27,13 +27,18 @@ export interface RealtimeVoiceAgentHandle {
     start: () => void;
     stop: () => void;
     toggle: () => void;
+    sendText: (text: string) => void;
+}
+
+interface ChatMessage {
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    timestamp: Date;
 }
 
 interface RealtimeVoiceAgentProps {
-    playwrightStatus: "disconnected" | "connecting" | "connected";
     onDebugMessage: (source: string, message: string) => void;
-    // Optional dynamic configuration
-    systemPrompt?: string; // Deprecated: instructions are now set server-side
     screenshots?: Screenshot[];
     browserConfig?: BrowserConfig;
     agentName?: string;
@@ -52,14 +57,16 @@ interface RealtimeVoiceAgentProps {
         isConnected: boolean;
         isConnecting: boolean;
         isMuted: boolean;
+        isAgentSpeaking?: boolean;
+        isHumanSpeaking?: boolean;
     }) => void;
+    // Callback for chat messages (user and assistant)
+    onChatMessage?: (message: ChatMessage) => void;
 }
 
 const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAgentProps>(function RealtimeVoiceAgent(
     {
-        playwrightStatus,
         onDebugMessage,
-        systemPrompt,
         screenshots = [],
         browserConfig,
         agentName = "HubSpot Assistant",
@@ -69,6 +76,7 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
         hideHeader = false,
         hideControlButton = false,
         onStatusChange,
+        onChatMessage,
     }: RealtimeVoiceAgentProps,
     ref
 ) {
@@ -80,9 +88,12 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
     const [ephemeralToken, setEphemeralToken] = useState<{ value: string } | null>(null);
     const [isInitialized, setIsInitialized] = useState(false);
     const [isInitializing, setIsInitializing] = useState(false);
+    const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
+    const [isHumanSpeaking, setIsHumanSpeaking] = useState(false);
 
     const sessionRef = useRef<RealtimeSession | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const humanSpeakingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Initialize SDK and fetch ephemeral token when component mounts
     useEffect(() => {
@@ -202,11 +213,30 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
             // Hook up logging for inputs, outputs, and tool calls
             const safeTruncate = (value: string, max = 400) => (value.length > max ? value.slice(0, max) + "…" : value);
 
-            // Transport-level diagnostics - only log errors (skip all the noisy session/audio events)
+            // Transport-level diagnostics and audio detection
             try {
                 (session as any)?.transport?.on?.("*", (evt: any) => {
                     try {
                         const t = typeof evt?.type === "string" ? evt.type : "event";
+
+                        // Detect human speaking via input audio buffer events
+                        if (t === "input_audio_buffer.speech_started" || t.includes("speech_started")) {
+                            setIsHumanSpeaking(true);
+                            // Clear any existing timeout
+                            if (humanSpeakingTimeoutRef.current) {
+                                clearTimeout(humanSpeakingTimeoutRef.current);
+                                humanSpeakingTimeoutRef.current = null;
+                            }
+                            onDebugMessage("realtime", "🎤 Human started speaking");
+                        } else if (t === "input_audio_buffer.speech_stopped" || t.includes("speech_stopped")) {
+                            setIsHumanSpeaking(false);
+                            if (humanSpeakingTimeoutRef.current) {
+                                clearTimeout(humanSpeakingTimeoutRef.current);
+                                humanSpeakingTimeoutRef.current = null;
+                            }
+                            onDebugMessage("realtime", "🎤 Human stopped speaking");
+                        }
+
                         // Only log actual errors, skip all other transport noise
                         if (t.includes("error")) {
                             onDebugMessage("error", `🚨 Transport error: ${t}`);
@@ -215,21 +245,21 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
                 });
             } catch {}
 
-            // Skip logging agent_start - it's noisy and we see tool calls anyway
-            // session.on("agent_start", () => { });
-
-            // Skip audio_start - noisy
-            // session.on("audio_start", () => { });
-            // Skip logging individual audio chunks - too noisy
-            // session.on("audio", () => { });
-            // Skip audio_stopped - noisy, we see the transcript anyway
-            // session.on("audio_stopped", () => { });
+            // Track speaking state for UI indicators
+            session.on("agent_start", () => {
+                setIsAgentSpeaking(true);
+                onDebugMessage("realtime", "🗣️ Agent started speaking");
+            });
 
             session.on("agent_end", (_ctx, _agent, output) => {
+                setIsAgentSpeaking(false);
                 if (output) {
                     onDebugMessage("realtime", `🗣️ Assistant: ${safeTruncate(output)}`);
                 }
             });
+
+            // Human speaking detection is now handled via transport events above
+            // We also use history_added as a fallback to detect when user messages appear
 
             session.on("agent_tool_start", (_ctx, _agent, tool, details) => {
                 const argsStr = (() => {
@@ -247,7 +277,7 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
                 }
             });
 
-            session.on("agent_tool_end", (_ctx, _agent, tool, result, details) => {
+            session.on("agent_tool_end", (_ctx, _agent, _tool, result, _details) => {
                 const resultStr = (() => {
                     try {
                         // Try to parse the result if it's a string
@@ -307,6 +337,27 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
                             if (text) {
                                 setTranscript(text);
                                 onDebugMessage("realtime", `🧑 You: ${safeTruncate(text)}`);
+
+                                // Send to chat component
+                                if (onChatMessage) {
+                                    onChatMessage({
+                                        id: item.id || crypto.randomUUID(),
+                                        role: "user",
+                                        content: text,
+                                        timestamp: new Date(),
+                                    });
+                                }
+
+                                // Fallback: If we see a user message, they were just speaking
+                                // Set speaking state briefly, then clear it after a short delay
+                                setIsHumanSpeaking(true);
+                                if (humanSpeakingTimeoutRef.current) {
+                                    clearTimeout(humanSpeakingTimeoutRef.current);
+                                }
+                                humanSpeakingTimeoutRef.current = setTimeout(() => {
+                                    setIsHumanSpeaking(false);
+                                    humanSpeakingTimeoutRef.current = null;
+                                }, 500); // Clear after 500ms
                             }
                         } else if (item.role === "assistant") {
                             const text = (item.content || [])
@@ -319,6 +370,16 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
                                 .join(" ");
                             if (text) {
                                 onDebugMessage("realtime", `🗣️ Assistant: ${safeTruncate(text)}`);
+
+                                // Send to chat component
+                                if (onChatMessage) {
+                                    onChatMessage({
+                                        id: item.id || crypto.randomUUID(),
+                                        role: "assistant",
+                                        content: text,
+                                        timestamp: new Date(),
+                                    });
+                                }
                             }
                         }
                         // Skip function_call logging here - we log via agent_tool_start/end with more detail
@@ -377,6 +438,13 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
             } finally {
                 sessionRef.current = null;
                 setIsConnected(false);
+                setIsHumanSpeaking(false);
+                setIsAgentSpeaking(false);
+                // Clear any pending timeouts
+                if (humanSpeakingTimeoutRef.current) {
+                    clearTimeout(humanSpeakingTimeoutRef.current);
+                    humanSpeakingTimeoutRef.current = null;
+                }
             }
         }
     }, [onDebugMessage]);
@@ -434,6 +502,49 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
         return unsubscribe;
     }, [isConnected, onDebugMessage]);
 
+    const sendText = useCallback(
+        (text: string) => {
+            const trimmed = text.trim();
+            if (!trimmed) return;
+            if (!sessionRef.current) {
+                onDebugMessage("realtime", "⚠️ Can't send message: not connected");
+                return;
+            }
+
+            try {
+                // Create a user message item
+                // @ts-ignore - session.send is used to send control events
+                sessionRef.current.send("conversation.item.create", {
+                    item: {
+                        type: "message",
+                        role: "user",
+                        content: [
+                            {
+                                type: "input_text",
+                                text: trimmed,
+                            },
+                        ],
+                    },
+                });
+
+                // Ask the agent to respond
+                // @ts-ignore
+                sessionRef.current.send("response.create");
+
+                // Also mirror into chat UI immediately
+                onChatMessage?.({
+                    id: crypto.randomUUID(),
+                    role: "user",
+                    content: trimmed,
+                    timestamp: new Date(),
+                });
+            } catch (e: any) {
+                onDebugMessage("realtime", `❌ Failed to send message: ${e?.message || String(e)}`);
+            }
+        },
+        [onDebugMessage, onChatMessage]
+    );
+
     // Expose imperative controls to parent
     useImperativeHandle(
         ref,
@@ -451,8 +562,11 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
             toggle: () => {
                 handleVoiceToggle();
             },
+            sendText: (text: string) => {
+                sendText(text);
+            },
         }),
-        [isConnected, connectToRealtime, disconnectFromRealtime]
+        [isConnected, connectToRealtime, disconnectFromRealtime, sendText]
     );
 
     // Notify parent of status changes
@@ -464,9 +578,11 @@ const RealtimeVoiceAgent = forwardRef<RealtimeVoiceAgentHandle, RealtimeVoiceAge
                 isConnected,
                 isConnecting,
                 isMuted,
+                isAgentSpeaking,
+                isHumanSpeaking,
             });
         }
-    }, [onStatusChange, isInitialized, isInitializing, isConnected, isConnecting, isMuted]);
+    }, [onStatusChange, isInitialized, isInitializing, isConnected, isConnecting, isMuted, isAgentSpeaking, isHumanSpeaking]);
 
     return (
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm">

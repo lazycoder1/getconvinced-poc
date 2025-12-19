@@ -66,13 +66,6 @@ async function loadCookiesFromDb(websiteSlug: string): Promise<Record<string, un
  */
 export async function POST(request: NextRequest) {
   try {
-    if (sessionManager.hasSession()) {
-      return NextResponse.json(
-        { error: 'Session already exists. Close it first.' },
-        { status: 409 }
-      );
-    }
-
     const body = await request.json().catch(() => ({}));
     const { 
       headless = false, 

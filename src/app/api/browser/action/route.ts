@@ -24,7 +24,6 @@ const logger = getBrowserLogger();
  * - screenshot: { type: 'screenshot' }
  * - hover: { type: 'hover', x: number, y: number }
  * - hover_element: { type: 'hover_element', selector: string }
- * - set_caption: { type: 'set_caption', text: string }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -91,7 +90,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'scroll': {
-        await controller.scroll(action.direction, action.amount);
+        await controller.scroll(action.direction, action.amount ?? undefined);
         result = { success: true };
         break;
       }
@@ -146,12 +145,6 @@ export async function POST(request: NextRequest) {
 
       case 'hover_element': {
         await controller.hoverElement(action.selector);
-        result = { success: true };
-        break;
-      }
-
-      case 'set_caption': {
-        await controller.setCaption(action.text);
         result = { success: true };
         break;
       }

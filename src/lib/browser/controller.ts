@@ -25,13 +25,22 @@ import type {
  * - Navigation and interactions
  * - DOM state extraction
  * - Screenshot capture
- * - Visual overlays
  */
+export interface ClickEvent {
+  x: number;
+  y: number;
+  timestamp: number;
+  type: 'click' | 'click_element';
+  selector?: string;
+}
+
 export class BrowserController {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
   private browserbaseSessionId: string | null = null;
+  private clickEvents: ClickEvent[] = [];
+  private maxClickEvents = 50; // Keep last 50 clicks
   private options: BrowserControllerOptions & { 
     headless: boolean; 
     viewport: { width: number; height: number } 
@@ -56,15 +65,20 @@ export class BrowserController {
       throw new Error('Browserbase config is required when useBrowserbase is true');
     }
 
+    const body: Record<string, unknown> = {
+      projectId: config.projectId,
+    };
+    if (config.region) {
+      body.region = config.region;
+    }
+
     const response = await fetch('https://www.browserbase.com/v1/sessions', {
       method: 'POST',
       headers: {
         'x-bb-api-key': config.apiKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        projectId: config.projectId,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -78,6 +92,121 @@ export class BrowserController {
   }
 
   /**
+   * Build candidate WebSocket endpoints for connecting to a Browserbase session.
+   * Browserbase sessions can be created in specific regions (e.g. ap-southeast-1),
+   * and the connect endpoint must target the same region.
+   *
+   * Ref: Browser Regions docs (sessions created in non-default region must be connected to in-region).
+   */
+  private buildBrowserbaseWsEndpoints(sessionId: string): string[] {
+    const cfg = this.options.browserbaseConfig;
+    if (!cfg) return [];
+
+    const apiKey = encodeURIComponent(cfg.apiKey);
+    const sid = encodeURIComponent(sessionId);
+    const region = cfg.region ? encodeURIComponent(cfg.region) : null;
+
+    const base = `wss://connect.browserbase.com?apiKey=${apiKey}&sessionId=${sid}`;
+
+    if (region) {
+      return [
+        // Candidate 1: regional hostname (most likely pattern for multi-region CDP gateways)
+        `wss://connect-${region}.browserbase.com?apiKey=${apiKey}&sessionId=${sid}`,
+        // Candidate 2: alternate regional hostname pattern
+        `wss://connect.${region}.browserbase.com?apiKey=${apiKey}&sessionId=${sid}`,
+        // Candidate 3: base host + region query param
+        `${base}&region=${region}`,
+        // Candidate 4: base host (default region)
+        base,
+      ];
+    }
+
+    return [base];
+  }
+
+  /**
+   * Connect to an existing Browserbase session over CDP, trying regional endpoints if needed.
+   */
+  private async connectToBrowserbaseOverCdp(sessionId: string): Promise<Browser> {
+    const endpoints = this.buildBrowserbaseWsEndpoints(sessionId);
+    let lastErr: unknown = null;
+
+    for (const wsEndpoint of endpoints) {
+      try {
+        console.log(`[browserbase] connectOverCDP attempting: ${wsEndpoint.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
+        return await chromium.connectOverCDP(wsEndpoint);
+      } catch (e) {
+        lastErr = e;
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[browserbase] connectOverCDP failed for endpoint: ${wsEndpoint.replace(/apiKey=[^&]+/, 'apiKey=***')} :: ${msg}`);
+      }
+    }
+
+    const tail = lastErr instanceof Error ? lastErr.message : String(lastErr);
+    throw new Error(
+      `Failed to connect to Browserbase session over CDP after trying ${endpoints.length} endpoint(s). ` +
+        `Last error: ${tail}`
+    );
+  }
+
+  /**
+   * Reconnect to an existing Browserbase session
+   */
+  async reconnectToBrowserbaseSession(sessionId: string): Promise<boolean> {
+    if (!this.options.useBrowserbase || !this.options.browserbaseConfig) {
+      return false;
+    }
+
+    try {
+      // Close existing browser connection if any
+      if (this.browser) {
+        try {
+          await this.browser.close();
+        } catch (e) {
+          // Ignore errors when closing
+        }
+        this.browser = null;
+        this.context = null;
+        this.page = null;
+      }
+
+      this.browser = await this.connectToBrowserbaseOverCdp(sessionId);
+      this.browserbaseSessionId = sessionId;
+
+      // Get the default context from the connected browser
+      const contexts = this.browser.contexts();
+      if (contexts.length > 0) {
+        this.context = contexts[0];
+      } else {
+        this.context = await this.browser.newContext({
+          viewport: this.options.viewport,
+        });
+      }
+
+      // Get existing page or create new one
+      const pages = this.context.pages();
+      if (pages.length > 0) {
+        this.page = pages[0];
+      } else {
+        this.page = await this.context.newPage();
+      }
+
+      // Set viewport on existing page
+      await this.page.setViewportSize(this.options.viewport);
+
+      console.log(`Reconnected to Browserbase session: ${sessionId}`);
+      return true;
+    } catch (error) {
+      console.error(`Failed to reconnect to Browserbase session ${sessionId}:`, error);
+      // Clean up on failure
+      this.browser = null;
+      this.context = null;
+      this.page = null;
+      return false;
+    }
+  }
+
+  /**
    * Launch the browser
    */
   async launch(): Promise<void> {
@@ -88,9 +217,7 @@ export class BrowserController {
     if (this.options.useBrowserbase && this.options.browserbaseConfig) {
       // Connect to Browserbase cloud browser
       this.browserbaseSessionId = await this.createBrowserbaseSession();
-      const wsEndpoint = `wss://connect.browserbase.com?apiKey=${this.options.browserbaseConfig.apiKey}&sessionId=${this.browserbaseSessionId}`;
-
-      this.browser = await chromium.connectOverCDP(wsEndpoint);
+      this.browser = await this.connectToBrowserbaseOverCdp(this.browserbaseSessionId);
 
       // Get the default context from the connected browser
       const contexts = this.browser.contexts();
@@ -129,16 +256,25 @@ export class BrowserController {
 
     // Inject cookies if provided
     if (this.options.cookies && this.options.cookies.length > 0) {
-      await this.context.addCookies(this.options.cookies.map(c => ({
-        name: c.name,
-        value: c.value,
-        domain: c.domain,
-        path: c.path || '/',
-        expires: c.expires,
-        httpOnly: c.httpOnly,
-        secure: c.secure,
-        sameSite: c.sameSite,
-      })));
+      console.log(`[BrowserController] Setting ${this.options.cookies.length} cookies`);
+      try {
+        await this.context.addCookies(this.options.cookies.map(c => ({
+          name: c.name,
+          value: c.value,
+          domain: c.domain,
+          path: c.path || '/',
+          expires: c.expires,
+          httpOnly: c.httpOnly,
+          secure: c.secure,
+          sameSite: c.sameSite,
+        })));
+        console.log(`[BrowserController] Successfully set ${this.options.cookies.length} cookies`);
+      } catch (error) {
+        console.error(`[BrowserController] Failed to set cookies:`, error);
+        throw error;
+      }
+    } else {
+      console.log(`[BrowserController] No cookies provided`);
     }
   }
 
@@ -299,6 +435,9 @@ export class BrowserController {
   async click(x: number, y: number): Promise<void> {
     const page = this.getPage();
     await page.mouse.click(x, y);
+    
+    // Track click event
+    this.addClickEvent({ x, y, timestamp: Date.now(), type: 'click' });
   }
 
   /**
@@ -322,7 +461,70 @@ export class BrowserController {
    * Click an element by selector
    */
   async clickElement(selector: string): Promise<void> {
-    await this.getLocator(selector).click();
+    const locator = this.getLocator(selector);
+    try {
+      // Get bounding box before clicking to track where the click happened
+      const box = await locator.boundingBox();
+      await locator.click();
+      
+      // Track click event with element position
+      if (box) {
+        // Center of the element
+        const x = box.x + box.width / 2;
+        const y = box.y + box.height / 2;
+        this.addClickEvent({ 
+          x, 
+          y, 
+          timestamp: Date.now(), 
+          type: 'click_element',
+          selector 
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Playwright "strict mode violation" means the selector matched multiple elements.
+      if (msg.includes('strict mode violation')) {
+        try {
+          const count = await locator.count();
+          throw new Error(
+            `Click failed: selector matched ${count} elements (strict mode). ` +
+              `Refine your selector (use browser_get_state to find a unique selector) ` +
+              `or use browser_click_text with an index parameter.`
+          );
+        } catch {
+          // Fall through if count failed
+        }
+      }
+      throw err;
+    }
+  }
+  
+  /**
+   * Add a click event to the tracking list
+   */
+  private addClickEvent(event: ClickEvent): void {
+    this.clickEvents.push(event);
+    // Keep only the last N events
+    if (this.clickEvents.length > this.maxClickEvents) {
+      this.clickEvents = this.clickEvents.slice(-this.maxClickEvents);
+    }
+  }
+  
+  /**
+   * Get recent click events
+   */
+  getClickEvents(since?: number): ClickEvent[] {
+    if (since) {
+      return this.clickEvents.filter(e => e.timestamp >= since);
+    }
+    return [...this.clickEvents];
+  }
+  
+  /**
+   * Clear click events
+   */
+  clearClickEvents(): void {
+    this.clickEvents = [];
   }
 
   /**
@@ -480,41 +682,6 @@ export class BrowserController {
     return page.screenshot({ type: 'png' });
   }
 
-  // ============================================================================
-  // Visual Overlay Methods
-  // ============================================================================
-
-  /**
-   * Set a caption overlay on the page
-   */
-  async setCaption(text: string): Promise<void> {
-    const page = this.getPage();
-    await page.evaluate((caption) => {
-      let overlay = document.getElementById('__agent_overlay_caption');
-      if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = '__agent_overlay_caption';
-        overlay.style.cssText = `
-          position: fixed;
-          bottom: 20px;
-          left: 50%;
-          transform: translateX(-50%);
-          background: rgba(0, 0, 0, 0.8);
-          color: white;
-          padding: 12px 24px;
-          border-radius: 8px;
-          font-family: system-ui, sans-serif;
-          font-size: 14px;
-          z-index: 999999;
-          pointer-events: none;
-          transition: opacity 0.2s;
-        `;
-        document.body.appendChild(overlay);
-      }
-      overlay.textContent = caption;
-      overlay.style.opacity = caption ? '1' : '0';
-    }, text);
-  }
 
   /**
    * Get the raw Playwright page for advanced operations

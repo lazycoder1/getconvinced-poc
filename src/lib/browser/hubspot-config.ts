@@ -9,10 +9,13 @@
 export const HUBSPOT_CONFIG = {
   // Base URL - update per environment
   BASE_URL: 'https://app-na2.hubspot.com',
-  
+
   // Portal ID - update per customer/demo account
   PORTAL_ID: '243381751',
-  
+
+  // Default starting URL for demos
+  DEFAULT_URL: 'https://app-na2.hubspot.com',
+
   // Get the full base URL with portal
   getPortalUrl: () => `${HUBSPOT_CONFIG.BASE_URL}/contacts/${HUBSPOT_CONFIG.PORTAL_ID}`,
 };

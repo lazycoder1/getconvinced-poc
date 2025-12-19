@@ -53,6 +53,10 @@ model WebsiteConfig {
   model           String   @default("gpt-4o-realtime-preview") @db.VarChar(100)
   default_mode    String   @default("screenshot") @db.VarChar(20)
   
+  // Eleven Labs agent configuration
+  eleven_labs_agent_id   String?  @db.VarChar(200)  // Eleven Labs agent ID
+  eleven_labs_agent_synced_at DateTime? @db.Timestamp(6)  // Last sync timestamp
+  
   created_at      DateTime @default(now()) @db.Timestamp(6)
   updated_at      DateTime @default(now()) @updatedAt @db.Timestamp(6)
 

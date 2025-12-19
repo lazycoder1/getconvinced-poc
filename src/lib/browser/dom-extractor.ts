@@ -148,12 +148,49 @@ export async function extractPageStateCompact(
         const tag = el.tagName.toLowerCase();
         const dataTestId = el.getAttribute('data-test-id');
         const dataSeleniumTest = el.getAttribute('data-selenium-test');
+        let dataTableExternalId = el.getAttribute('data-table-external-id');
+        const dataColumnIndex = el.getAttribute('data-column-index');
 
-        if (dataTestId) return '[data-test-id="' + dataTestId + '"]';
+        // For links inside table cells, check the parent cell for data-table-external-id
+        if (!dataTableExternalId && tag === 'a') {
+          try {
+            const parentCell = el.closest && el.closest('td[data-table-external-id], th[data-table-external-id]');
+            if (parentCell) {
+              dataTableExternalId = parentCell.getAttribute && parentCell.getAttribute('data-table-external-id');
+            }
+          } catch (e) {}
+        }
+
+        // HubSpot CRM tables often reuse the same data-test-id for many editable cells.
+        // Prefer a row-scoped selector when we have a stable cell external id.
+        if (dataTableExternalId) {
+          try {
+            const row = el.closest && el.closest('tr[data-test-id^="row-"]');
+            const rowTestId = row && row.getAttribute && row.getAttribute('data-test-id');
+            if (rowTestId) {
+              // For links, append the link selector to the row-scoped cell selector
+              if (tag === 'a') {
+                return '[data-test-id="' + rowTestId + '"] [data-table-external-id="' + dataTableExternalId + '"] a[data-link]';
+              }
+              return '[data-test-id="' + rowTestId + '"] [data-table-external-id="' + dataTableExternalId + '"]';
+            }
+          } catch (e) {}
+          if (tag === 'a') {
+            return '[data-table-external-id="' + dataTableExternalId + '"] a[data-link]';
+          }
+          return '[data-table-external-id="' + dataTableExternalId + '"]';
+        }
+
+        // Avoid returning selectors that we know are not unique in HubSpot tables.
+        if (dataTestId && dataTestId !== 'framework-data-table-editable-cell') {
+          return '[data-test-id="' + dataTestId + '"]';
+        }
         if (dataSeleniumTest) return '[data-selenium-test="' + dataSeleniumTest + '"]';
         if (el.id) return '#' + el.id;
         if (el.getAttribute('name')) return tag + '[name="' + el.getAttribute('name') + '"]';
         if (el.getAttribute('aria-label')) return tag + '[aria-label="' + el.getAttribute('aria-label') + '"]';
+        if (dataTestId) return '[data-test-id="' + dataTestId + '"]';
+        if (dataColumnIndex && tag === 'td') return 'td[data-column-index="' + dataColumnIndex + '"]';
 
         if (tag === 'a' && el.getAttribute('href')) {
           const href = el.getAttribute('href');

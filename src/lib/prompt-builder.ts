@@ -76,6 +76,23 @@ ${routeDescriptions}
 `;
 }
 
+// Simple in-memory cache for prompts (TTL: 5 minutes)
+const promptCache = new Map<string, { data: any; expires: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function getCached<T>(key: string): T | null {
+    const cached = promptCache.get(key);
+    if (cached && cached.expires > Date.now()) {
+        return cached.data as T;
+    }
+    promptCache.delete(key);
+    return null;
+}
+
+function setCache<T>(key: string, data: T): void {
+    promptCache.set(key, { data, expires: Date.now() + CACHE_TTL_MS });
+}
+
 /**
  * Build the full combined prompt with mode-specific instructions
  * This is the PRIMARY function for getting the complete agent prompt
@@ -88,15 +105,29 @@ export async function buildFullPrompt(websiteSlug: string, mode: DemoMode = 'scr
     websiteName: string;
     screenshotCount: number;
 }> {
+    // Check cache first
+    const cacheKey = `prompt:${websiteSlug}:${mode}`;
+    const cached = getCached<{
+        prompt: string;
+        mode: DemoMode;
+        routes: ParsedRoute[];
+        baseUrl: string;
+        websiteName: string;
+        screenshotCount: number;
+    }>(cacheKey);
+    if (cached) {
+        return cached;
+    }
+
     try {
-        // 1. Load base prompt (website-agnostic methodology)
-        const basePrompt = await loadLocalPrompt('base-prompt.md');
+        // 1. Load all local prompts in PARALLEL (performance optimization)
+        const [basePrompt, livePrompt, screenshotPrompt] = await Promise.all([
+            loadLocalPrompt('base-prompt.md'),
+            loadLocalPrompt('live_mode.md'),
+            loadLocalPrompt('screenshot_mode.md'),
+        ]);
 
-        // 2. Load mode-specific instructions
-        const livePrompt = await loadLocalPrompt('live_mode.md');
-        const screenshotPrompt = await loadLocalPrompt('screenshot_mode.md');
-
-        // 3. Get the website with config
+        // 2. Get the website with config
         const website = await prisma.website.findUnique({
             where: { slug: websiteSlug },
             include: { config: true }
@@ -106,27 +137,28 @@ export async function buildFullPrompt(websiteSlug: string, mode: DemoMode = 'scr
             throw new Error(`Website not found: ${websiteSlug}`);
         }
 
-        // 4. Get the active website-specific prompt from S3
-        const activePrompt = await prisma.systemPrompt.findFirst({
-            where: {
-                website: { slug: websiteSlug },
-                is_active: true
-            }
-        });
+        // 3. Fetch system prompt and screenshots in PARALLEL (performance optimization)
+        const [activePrompt, screenshots] = await Promise.all([
+            prisma.systemPrompt.findFirst({
+                where: {
+                    website_id: website.id,
+                    is_active: true
+                }
+            }),
+            prisma.screenshot.findMany({
+                where: {
+                    website_id: website.id,
+                    is_active: true
+                },
+                orderBy: { sort_order: 'asc' }
+            })
+        ]);
 
+        // 4. Load website-specific prompt from S3 (if exists)
         let websitePrompt = '';
         if (activePrompt) {
             websitePrompt = await loadPromptFromS3(activePrompt.s3_key, activePrompt.s3_bucket || DEFAULT_S3_BUCKET);
         }
-
-        // 5. Load screenshots from database
-        const screenshots = await prisma.screenshot.findMany({
-            where: {
-                website: { slug: websiteSlug },
-                is_active: true
-            },
-            orderBy: { sort_order: 'asc' }
-        });
 
         // 6. Get routes and base URL
         const routes = (website.config?.nav_routes_json as unknown as ParsedRoute[]) || [];
@@ -187,7 +219,7 @@ export async function buildFullPrompt(websiteSlug: string, mode: DemoMode = 'scr
             .replace(/\{\{PORTAL_ID\}\}/g, website.config?.portal_id || '')
             .replace(/\{\{DEMO_MODE\}\}/g, mode);
 
-        return {
+        const result = {
             prompt: finalPrompt,
             mode,
             routes,
@@ -195,6 +227,11 @@ export async function buildFullPrompt(websiteSlug: string, mode: DemoMode = 'scr
             websiteName: website.name,
             screenshotCount: screenshots.length,
         };
+
+        // Cache the result for 5 minutes
+        setCache(cacheKey, result);
+
+        return result;
     } catch (error) {
         console.error('Error building full prompt:', error);
         throw new Error('Failed to build full prompt');

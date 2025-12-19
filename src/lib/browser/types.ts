@@ -62,11 +62,6 @@ export const HoverElementAction = z.object({
   selector: z.string(),
 });
 
-export const SetCaptionAction = z.object({
-  type: z.literal('set_caption'),
-  text: z.string(),
-});
-
 export const BrowserAction = z.discriminatedUnion('type', [
   ClickAction,
   ClickElementAction,
@@ -79,7 +74,6 @@ export const BrowserAction = z.discriminatedUnion('type', [
   SimpleAction,
   HoverAction,
   HoverElementAction,
-  SetCaptionAction,
 ]);
 
 export type BrowserAction = z.infer<typeof BrowserAction>;
@@ -106,6 +100,10 @@ export interface Cookie {
 export interface BrowserbaseConfig {
   apiKey: string;
   projectId: string;
+  /**
+   * Optional region for Browserbase sessions, e.g. "ap-southeast-1"
+   */
+  region?: string;
 }
 
 export interface BrowserControllerOptions {

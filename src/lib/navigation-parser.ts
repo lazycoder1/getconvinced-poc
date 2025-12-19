@@ -213,13 +213,6 @@ export function parseNavigationYaml(yamlText: string): ParseResult {
 }
 
 /**
- * Generate route keys for enum validation
- */
-export function generateRouteEnum(routes: ParsedRoute[]): string[] {
-    return routes.map(r => r.key);
-}
-
-/**
  * Generate route descriptions for tool injection
  */
 export function generateRouteDescriptions(routes: ParsedRoute[]): string {
@@ -247,73 +240,12 @@ export function generateRouteDescriptions(routes: ParsedRoute[]): string {
 }
 
 /**
- * Generate a route lookup map for quick URL resolution
- */
-export function generateRouteLookup(routes: ParsedRoute[], baseUrl: string): Record<string, string> {
-    const lookup: Record<string, string> = {};
-    for (const route of routes) {
-        lookup[route.key] = baseUrl + route.path;
-    }
-    return lookup;
-}
-
-/**
- * Validate a route key exists
- */
-export function isValidRouteKey(routes: ParsedRoute[], key: string): boolean {
-    return routes.some(r => r.key === key);
-}
-
-/**
  * Get full URL for a route
  */
 export function getRouteUrl(routes: ParsedRoute[], baseUrl: string, key: string): string | null {
     const route = routes.find(r => r.key === key);
     if (!route) return null;
     return baseUrl + route.path;
-}
-
-/**
- * Get the default/start URL for the website
- */
-export function getDefaultUrl(config: WebsiteConfig): string {
-    if (config.defaultUrl) {
-        // Substitute variables in default URL too
-        let url = config.defaultUrl;
-        for (const [key, value] of Object.entries(config.variables)) {
-            const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-            url = url.replace(pattern, value);
-        }
-        // If defaultUrl is a path, prepend baseUrl
-        if (url.startsWith('/')) {
-            return config.baseUrl + url;
-        }
-        return url;
-    }
-    // Fall back to base URL
-    return config.baseUrl;
-}
-
-/**
- * Check if a URL matches the auth domain
- */
-export function matchesAuthDomain(url: string, authDomain: string | undefined): boolean {
-    if (!authDomain) return true;  // No filter = match all
-
-    try {
-        const urlObj = new URL(url);
-        const hostname = urlObj.hostname;
-
-        // Support wildcard patterns like *.example.com
-        if (authDomain.startsWith('*.')) {
-            const domain = authDomain.slice(2);
-            return hostname === domain || hostname.endsWith('.' + domain);
-        }
-
-        return hostname === authDomain;
-    } catch {
-        return false;
-    }
 }
 
 /**
@@ -355,40 +287,5 @@ Settings:
   settings_general: /settings/general | General Settings | Basic configuration
   settings_users: /settings/{{ACCOUNT_ID}}/users | User Management | Team members
   settings_billing: /settings/{{ACCOUNT_ID}}/billing | Billing | Subscription & payments`;
-}
-
-/**
- * Generate HubSpot-specific example YAML
- */
-export function getHubSpotExampleYaml(): string {
-    return `# HubSpot Navigation Configuration
-# 
-# Use {{PORTAL_ID}} for portal ID substitution
-
-base_url: https://app-na2.hubspot.com
-default_url: /contacts/{{PORTAL_ID}}/objects/0-1
-
-# For HubSpot, use portal_id (backward compatible) or variables.PORTAL_ID
-portal_id: 243381751
-
-# Alternatively, use the generic variables section:
-# variables:
-#   PORTAL_ID: "243381751"
-
-CRM:
-  contacts: /contacts/{{PORTAL_ID}}/objects/0-1 | Contacts | View all contacts
-  contacts_all: /contacts/{{PORTAL_ID}}/objects/0-1?view-tab=all | All Contacts | Unfiltered list
-  companies: /contacts/{{PORTAL_ID}}/objects/0-2 | Companies | Company records
-  deals: /contacts/{{PORTAL_ID}}/objects/0-3 | Deals | Sales pipeline
-  tickets: /contacts/{{PORTAL_ID}}/objects/0-5 | Tickets | Support tickets
-
-Activities:
-  tasks: /tasks/{{PORTAL_ID}}/view/all | Tasks | Task queue
-  tasks_today: /tasks/{{PORTAL_ID}}/view/all?view-tab=due_today | Today's Tasks | Due today
-  calls: /contacts/{{PORTAL_ID}}/objects/0-48 | Calls | Call activity log
-
-Inbox:
-  inbox: /live-messages/{{PORTAL_ID}}/inbox | Inbox | Conversations inbox
-  inbox_mine: /live-messages/{{PORTAL_ID}}/inbox/assigned-to-me | My Conversations | Assigned to you`;
 }
 

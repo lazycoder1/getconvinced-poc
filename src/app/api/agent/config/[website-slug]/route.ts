@@ -3,6 +3,9 @@ import { getWebsiteConfig, buildFullPrompt } from '@/lib/prompt-builder';
 import { prisma } from '@/lib/database';
 import { ParsedRoute } from '@/lib/navigation-parser';
 
+// Cache TTL: 5 minutes for browser caching
+const CACHE_MAX_AGE = 300;
+
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ 'website-slug': string }> }
@@ -20,8 +23,21 @@ export async function GET(
             );
         }
 
-        // Get website configuration
-        const config = await getWebsiteConfig(websiteSlug);
+        // Fetch website config and build prompt in PARALLEL (performance optimization)
+        const [config, promptResult] = await Promise.all([
+            getWebsiteConfig(websiteSlug),
+            buildFullPrompt(websiteSlug, mode as any).catch((error) => {
+                console.warn('Failed to build full prompt, using fallback:', error);
+                return {
+                    prompt: '# Default Agent Instructions\n\nYou are an AI assistant specialized in demoing software.',
+                    routes: [] as ParsedRoute[],
+                    baseUrl: '',
+                    websiteName: '',
+                    screenshotCount: 0,
+                    mode: mode as any,
+                };
+            }),
+        ]);
 
         if (!config) {
             return NextResponse.json(
@@ -30,29 +46,11 @@ export async function GET(
             );
         }
 
-        // Get website config for voice settings and navigation routes
+        // Get website config for voice settings (single query, includes config relation)
         const websiteWithConfig = await prisma.website.findUnique({
             where: { slug: websiteSlug },
-            include: {
-                config: true
-            }
-        }) as any; // Cast to any to avoid Prisma include typing issues
-
-        // Build the combined prompt with mode-aware unified builder
-        let combinedPrompt = '';
-        let navigationRoutes: ParsedRoute[] = [];
-        let baseUrl = '';
-
-        try {
-            // Use the new unified prompt builder
-            const result = await buildFullPrompt(websiteSlug, mode as any);
-            combinedPrompt = result.prompt;
-            navigationRoutes = result.routes;
-            baseUrl = result.baseUrl;
-        } catch (error) {
-            console.warn('Failed to build full prompt, using basic fallback:', error);
-            combinedPrompt = '# Default Agent Instructions\n\nYou are an AI assistant specialized in demoing software.';
-        }
+            include: { config: true }
+        }) as any;
 
         // Get voice config from database or use defaults
         const voiceConfig = {
@@ -63,7 +61,7 @@ export async function GET(
         // Return the complete configuration
         const agentConfig = {
             website: config.website,
-            system_prompt: combinedPrompt,
+            system_prompt: promptResult.prompt,
             screenshots: config.screenshots.sort((a: any, b: any) => {
                 // Default screenshot comes first, then by sort_order, then by created_at
                 if (a.is_default && !b.is_default) return -1;
@@ -72,11 +70,10 @@ export async function GET(
                 return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
             }),
             voice_config: voiceConfig,
-            // Always provide browser config if routes are available, so agent has the tools
-            browser_config: navigationRoutes.length > 0 || baseUrl ? {
-                navigation_routes: navigationRoutes,
-                base_url: baseUrl,
-                default_url: websiteWithConfig?.config?.default_url || baseUrl,
+            browser_config: promptResult.routes.length > 0 || promptResult.baseUrl ? {
+                navigation_routes: promptResult.routes,
+                base_url: promptResult.baseUrl,
+                default_url: websiteWithConfig?.config?.default_url || promptResult.baseUrl,
                 has_cookies: !!(websiteWithConfig?.config?.cookies_json),
                 cookie_count: Array.isArray(websiteWithConfig?.config?.cookies_json)
                     ? websiteWithConfig.config.cookies_json.length
@@ -86,7 +83,12 @@ export async function GET(
             timestamp: new Date().toISOString()
         };
 
-        return NextResponse.json(agentConfig);
+        // Return with cache headers (5 minute browser cache, revalidate in background)
+        return NextResponse.json(agentConfig, {
+            headers: {
+                'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, stale-while-revalidate=60`,
+            },
+        });
 
     } catch (error) {
         console.error('Error fetching agent config:', error);
