@@ -125,17 +125,53 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/browser/session - Get current session info
+ * Checks in-memory state first, then falls back to checking Browserbase API
+ * (needed for serverless environments where memory doesn't persist)
  */
 export async function GET() {
   try {
+    // First check in-memory state
     const info = sessionManager.getSessionInfo();
-    if (!info) {
-      return NextResponse.json(
-        { error: 'No active session' },
-        { status: 404 }
-      );
+    if (info) {
+      return NextResponse.json(info);
     }
-    return NextResponse.json(info);
+
+    // In serverless, memory doesn't persist - check Browserbase API for running sessions
+    const apiKey = process.env.BROWSERBASE_API_KEY;
+    const projectId = process.env.BROWSERBASE_PROJECT_ID;
+    
+    if (apiKey && projectId) {
+      try {
+        const response = await fetch('https://www.browserbase.com/v1/sessions?status=RUNNING', {
+          headers: { 'x-bb-api-key': apiKey },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const sessions = data.sessions || data || [];
+          
+          // Find a running session in our project
+          const runningSession = Array.isArray(sessions)
+            ? sessions.find((s: any) => s.projectId === projectId && s.status === 'RUNNING')
+            : null;
+          
+          if (runningSession) {
+            return NextResponse.json({
+              id: runningSession.id,
+              createdAt: new Date(runningSession.createdAt),
+              browserbaseSessionId: runningSession.id,
+            });
+          }
+        }
+      } catch (bbError) {
+        console.error('Error checking Browserbase for sessions:', bbError);
+      }
+    }
+
+    return NextResponse.json(
+      { error: 'No active session' },
+      { status: 404 }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
