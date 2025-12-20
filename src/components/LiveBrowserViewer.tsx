@@ -150,7 +150,7 @@ export default function LiveBrowserViewer({
                 }
             }
 
-            // Fallback: check API (in-memory session on server)
+            // Fallback: check API - pass any known browserbaseSessionId for faster reconnection
             const response = await fetch("/api/browser/session");
             if (response.ok) {
                 const sessionData = await response.json();
