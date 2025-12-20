@@ -30,18 +30,15 @@ async function fetchDebugUrl(browserbaseSessionId: string, apiKey: string): Prom
  * Uses database for serverless-compatible session tracking.
  * 
  * Query params:
- * - tabId: string - Filter by tab ID to get only this tab's session (required)
+ * - tabId: string - Filter by tab ID to get this tab's session (optional)
+ *                   If provided, checks database; otherwise checks in-memory (for tools)
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const tabId = searchParams.get('tabId');
 
-    if (!tabId) {
-      return NextResponse.json({ error: 'tabId is required' }, { status: 400 });
-    }
-
-    // First try in-memory state
+    // First try in-memory state (always, for tools on same instance)
     if (sessionManager.hasSession()) {
       const controller = sessionManager.getController();
       const liveUrl = await controller.getBrowserbaseLiveViewUrl();
@@ -54,35 +51,37 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Check database for session
-    const dbSession = await prisma.browserSession.findUnique({
-      where: { tab_id: tabId },
-    });
+    // If tabId provided, check database (serverless-compatible)
+    if (tabId) {
+      const dbSession = await prisma.browserSession.findUnique({
+        where: { tab_id: tabId },
+      });
 
-    if (dbSession && dbSession.status === 'running') {
-      // If we have a cached debug URL, use it
-      if (dbSession.debug_url) {
-        return NextResponse.json({
-          liveUrl: dbSession.debug_url,
-          usingBrowserbase: true,
-        });
-      }
-
-      // Otherwise, fetch from Browserbase and cache it
-      const apiKey = process.env.BROWSERBASE_API_KEY;
-      if (apiKey) {
-        const debugUrl = await fetchDebugUrl(dbSession.browserbase_session_id, apiKey);
-        if (debugUrl) {
-          // Cache the debug URL in database
-          await prisma.browserSession.update({
-            where: { tab_id: tabId },
-            data: { debug_url: debugUrl },
-          });
-
+      if (dbSession && dbSession.status === 'running') {
+        // If we have a cached debug URL, use it
+        if (dbSession.debug_url) {
           return NextResponse.json({
-            liveUrl: debugUrl,
+            liveUrl: dbSession.debug_url,
             usingBrowserbase: true,
           });
+        }
+
+        // Otherwise, fetch from Browserbase and cache it
+        const apiKey = process.env.BROWSERBASE_API_KEY;
+        if (apiKey) {
+          const debugUrl = await fetchDebugUrl(dbSession.browserbase_session_id, apiKey);
+          if (debugUrl) {
+            // Cache the debug URL in database
+            await prisma.browserSession.update({
+              where: { tab_id: tabId },
+              data: { debug_url: debugUrl },
+            });
+
+            return NextResponse.json({
+              liveUrl: debugUrl,
+              usingBrowserbase: true,
+            });
+          }
         }
       }
     }

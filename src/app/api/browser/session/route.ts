@@ -83,6 +83,7 @@ async function fetchDebugUrl(browserbaseSessionId: string, apiKey: string): Prom
  * - websiteSlug: string - load cookies from database for this website
  * - loadFromDb: boolean - whether to load cookies from database (requires websiteSlug)
  * - tabId: string - unique identifier for this browser tab (used for session isolation)
+ *                   If not provided, uses in-memory session only (for server-side tools)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -93,28 +94,26 @@ export async function POST(request: NextRequest) {
       loadHubspotCookies = false,
       websiteSlug,
       loadFromDb = false,
-      tabId, // Unique tab ID for session isolation
+      tabId, // Unique tab ID for session isolation (optional for tools)
     } = body;
 
-    if (!tabId) {
-      return NextResponse.json({ error: 'tabId is required' }, { status: 400 });
-    }
+    // If tabId provided, check DB for existing session first
+    if (tabId) {
+      const existingSession = await prisma.browserSession.findUnique({
+        where: { tab_id: tabId },
+      });
 
-    // Check if session already exists for this tabId
-    const existingSession = await prisma.browserSession.findUnique({
-      where: { tab_id: tabId },
-    });
-
-    if (existingSession && existingSession.status === 'running') {
-      // Return existing session
-      return NextResponse.json({
-        id: existingSession.id,
-        createdAt: existingSession.created_at,
-        browserbaseSessionId: existingSession.browserbase_session_id,
-        cookiesLoaded: true,
-        cookieCount: 0,
-        cookieSource: 'existing',
-      }, { status: 200 });
+      if (existingSession && existingSession.status === 'running') {
+        // Return existing session
+        return NextResponse.json({
+          id: existingSession.id,
+          createdAt: existingSession.created_at,
+          browserbaseSessionId: existingSession.browserbase_session_id,
+          cookiesLoaded: true,
+          cookieCount: 0,
+          cookieSource: 'existing',
+        }, { status: 200 });
+      }
     }
 
     // Determine which cookies to use (priority: direct cookies > DB > file)
@@ -147,31 +146,32 @@ export async function POST(request: NextRequest) {
       cookies: finalCookies,
     }, tabId);
 
-    // Fetch debug URL and store in database
-    const apiKey = process.env.BROWSERBASE_API_KEY;
-    let debugUrl: string | null = null;
-    if (apiKey && session.browserbaseSessionId) {
-      debugUrl = await fetchDebugUrl(session.browserbaseSessionId, apiKey);
-    }
+    // If tabId provided, store session in database for serverless persistence
+    if (tabId) {
+      const apiKey = process.env.BROWSERBASE_API_KEY;
+      let debugUrl: string | null = null;
+      if (apiKey && session.browserbaseSessionId) {
+        debugUrl = await fetchDebugUrl(session.browserbaseSessionId, apiKey);
+      }
 
-    // Store session in database (upsert in case of race condition)
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 min expiry
-    await prisma.browserSession.upsert({
-      where: { tab_id: tabId },
-      create: {
-        tab_id: tabId,
-        browserbase_session_id: session.browserbaseSessionId || session.id,
-        debug_url: debugUrl,
-        status: 'running',
-        expires_at: expiresAt,
-      },
-      update: {
-        browserbase_session_id: session.browserbaseSessionId || session.id,
-        debug_url: debugUrl,
-        status: 'running',
-        expires_at: expiresAt,
-      },
-    });
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 min expiry
+      await prisma.browserSession.upsert({
+        where: { tab_id: tabId },
+        create: {
+          tab_id: tabId,
+          browserbase_session_id: session.browserbaseSessionId || session.id,
+          debug_url: debugUrl,
+          status: 'running',
+          expires_at: expiresAt,
+        },
+        update: {
+          browserbase_session_id: session.browserbaseSessionId || session.id,
+          debug_url: debugUrl,
+          status: 'running',
+          expires_at: expiresAt,
+        },
+      });
+    }
 
     logger.setSessionId(session.id);
     logger.logResponse('create_session', session, Date.now() - start);
@@ -191,31 +191,35 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/browser/session - Get current session info
- * Checks database for session by tabId (works in serverless)
  * 
  * Query params:
- * - tabId: string - Filter by tab ID to get this tab's session (required)
+ * - tabId: string - Filter by tab ID to get this tab's session (optional)
+ *                   If provided, checks database; otherwise checks in-memory (for tools)
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const tabId = searchParams.get('tabId');
 
-    if (!tabId) {
-      return NextResponse.json({ error: 'tabId is required' }, { status: 400 });
+    // If tabId provided, check database (serverless-compatible)
+    if (tabId) {
+      const dbSession = await prisma.browserSession.findUnique({
+        where: { tab_id: tabId },
+      });
+
+      if (dbSession && dbSession.status === 'running') {
+        return NextResponse.json({
+          id: dbSession.id,
+          createdAt: dbSession.created_at,
+          browserbaseSessionId: dbSession.browserbase_session_id,
+        });
+      }
     }
 
-    // Check database for session
-    const dbSession = await prisma.browserSession.findUnique({
-      where: { tab_id: tabId },
-    });
-
-    if (dbSession && dbSession.status === 'running') {
-      return NextResponse.json({
-        id: dbSession.id,
-        createdAt: dbSession.created_at,
-        browserbaseSessionId: dbSession.browserbase_session_id,
-      });
+    // Fallback: check in-memory session (for tools on same serverless instance)
+    const info = sessionManager.getSessionInfo();
+    if (info) {
+      return NextResponse.json(info);
     }
 
     return NextResponse.json(
