@@ -138,15 +138,76 @@ export async function POST(request: NextRequest) {
 /**
  * GET /api/browser/session - Get current session info
  * 
- * Checks in-memory session state. Client should cache session info in sessionStorage
- * and only call this as a fallback.
+ * Checks in-memory session state first.
+ * If no in-memory session, tries to find and reconnect to a running Browserbase session.
+ * This enables tools to work across different serverless instances.
  */
 export async function GET() {
   try {
-    // Check in-memory session
+    // Check in-memory session first
     const info = sessionManager.getSessionInfo();
     if (info) {
       return NextResponse.json(info);
+    }
+
+    // No in-memory session - try to find and reconnect to a running Browserbase session
+    // This is critical for tools that hit a different serverless instance
+    const apiKey = process.env.BROWSERBASE_API_KEY;
+    const projectId = process.env.BROWSERBASE_PROJECT_ID;
+    
+    if (apiKey && projectId) {
+      try {
+        // Find running sessions in our project
+        const response = await fetch('https://www.browserbase.com/v1/sessions?status=RUNNING', {
+          headers: { 'x-bb-api-key': apiKey },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const sessions = data.sessions || data || [];
+          
+          // Find first running session in our project
+          const runningSession = Array.isArray(sessions)
+            ? sessions.find((s: any) => s.projectId === projectId && s.status === 'RUNNING')
+            : null;
+          
+          if (runningSession) {
+            console.log(`[session] Found running Browserbase session: ${runningSession.id}, reconnecting...`);
+            
+            // Create a new session manager entry and reconnect
+            const { BrowserController } = await import('@/lib/browser/controller');
+            const controller = new BrowserController({
+              useBrowserbase: true,
+              browserbaseConfig: {
+                apiKey,
+                projectId,
+              },
+            });
+            
+            const reconnected = await controller.reconnectToBrowserbaseSession(runningSession.id);
+            if (reconnected) {
+              // Store in session manager for future requests on this instance
+              // @ts-ignore - accessing private property for reconnection
+              sessionManager['session'] = {
+                id: runningSession.id,
+                controller,
+                createdAt: new Date(runningSession.createdAt),
+                browserbaseSessionId: runningSession.id,
+              };
+              
+              console.log(`[session] Successfully reconnected to session: ${runningSession.id}`);
+              
+              return NextResponse.json({
+                id: runningSession.id,
+                createdAt: new Date(runningSession.createdAt),
+                browserbaseSessionId: runningSession.id,
+              });
+            }
+          }
+        }
+      } catch (bbError) {
+        console.error('Error checking/reconnecting to Browserbase:', bbError);
+      }
     }
 
     return NextResponse.json(
