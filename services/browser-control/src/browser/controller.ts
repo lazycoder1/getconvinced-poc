@@ -96,21 +96,23 @@ export class BrowserController {
         return null;
       }
 
-      const data = await response.json();
-      const sessions = data.sessions || data || [];
+      const data = await response.json() as { sessions?: unknown[] } | unknown[];
+      const sessions = (Array.isArray(data) ? data : (data as { sessions?: unknown[] }).sessions) || [];
 
       const matchingSessions = Array.isArray(sessions)
-        ? sessions.filter((s: { projectId: string; status: string; userMetadata?: { tabId?: string } }) => {
-          if (s.projectId !== config.projectId || s.status !== 'RUNNING') {
+        ? sessions.filter((s): s is { id: string; connectUrl: string; projectId: string; status: string; userMetadata?: { tabId?: string } } => {
+          if (typeof s !== 'object' || s === null) return false;
+          const session = s as { projectId?: string; status?: string; userMetadata?: { tabId?: string } };
+          if (session.projectId !== config.projectId || session.status !== 'RUNNING') {
             return false;
           }
-          const userMetadata = s.userMetadata || {};
+          const userMetadata = session.userMetadata || {};
           return userMetadata.tabId === this.tabId;
         })
         : [];
 
       if (matchingSessions.length > 0) {
-        const session = matchingSessions[0] as { id: string; connectUrl: string };
+        const session = matchingSessions[0];
         console.log(`[browserbase] Found existing session for tabId ${this.tabId}: ${session.id}`);
         return {
           id: session.id,
@@ -170,7 +172,7 @@ export class BrowserController {
       throw new Error(`Failed to create Browserbase session: ${response.status} ${errorText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { id: string; connectUrl: string };
     console.log(`[browserbase] Created new session with keepAlive (tabId: ${this.tabId || 'none'}): ${data.id}`);
 
     return {
@@ -211,7 +213,7 @@ export class BrowserController {
         return false;
       }
 
-      const sessionData = await response.json();
+      const sessionData = await response.json() as { connectUrl?: string; status?: string };
       if (!sessionData.connectUrl) {
         console.log('[browserbase] Session does not have a connectUrl');
         return false;
@@ -357,7 +359,7 @@ export class BrowserController {
         return null;
       }
 
-      const data = await response.json();
+      const data = await response.json() as { debuggerFullscreenUrl?: string };
       return data.debuggerFullscreenUrl || null;
     } catch (error) {
       console.error('Error getting Browserbase live view URL:', error);
