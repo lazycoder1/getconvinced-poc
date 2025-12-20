@@ -150,15 +150,13 @@ export default function LiveBrowserViewer({
                 }
             }
 
-            // Fallback: check API (will hit DB)
-            const sessionUrl = tabId ? `/api/browser/session?tabId=${encodeURIComponent(tabId)}` : "/api/browser/session";
-            const response = await fetch(sessionUrl);
+            // Fallback: check API (in-memory session on server)
+            const response = await fetch("/api/browser/session");
             if (response.ok) {
                 const sessionData = await response.json();
 
-                // Also pass tabId when fetching live URL
-                const liveUrlEndpoint = tabId ? `/api/browser/live-url?tabId=${encodeURIComponent(tabId)}` : "/api/browser/live-url";
-                const liveResponse = await fetch(liveUrlEndpoint);
+                // Fetch live URL
+                const liveResponse = await fetch("/api/browser/live-url");
                 if (liveResponse.ok) {
                     const liveData = await liveResponse.json();
                     if (liveData.liveUrl) {
@@ -216,8 +214,7 @@ export default function LiveBrowserViewer({
             const session = await response.json();
             log(`✅ Session started: ${session.id}`);
 
-            const liveUrlEndpoint = tabId ? `/api/browser/live-url?tabId=${encodeURIComponent(tabId)}` : "/api/browser/live-url";
-            const liveResponse = await fetch(liveUrlEndpoint);
+            const liveResponse = await fetch("/api/browser/live-url");
             if (liveResponse.ok) {
                 const liveData = await liveResponse.json();
                 if (liveData.liveUrl) {
@@ -261,8 +258,7 @@ export default function LiveBrowserViewer({
         log("🛑 Stopping browser session...");
 
         try {
-            const deleteUrl = tabId ? `/api/browser/session?tabId=${encodeURIComponent(tabId)}` : "/api/browser/session";
-            await fetch(deleteUrl, { method: "DELETE" });
+            await fetch("/api/browser/session", { method: "DELETE" });
             log("✅ Session stopped");
             
             // Clear browser cache

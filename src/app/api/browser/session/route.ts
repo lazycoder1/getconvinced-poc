@@ -55,25 +55,6 @@ async function loadCookiesFromDb(websiteSlug: string): Promise<Record<string, un
 }
 
 /**
- * Helper to fetch and cache the debug URL from Browserbase
- */
-async function fetchDebugUrl(browserbaseSessionId: string, apiKey: string): Promise<string | null> {
-  try {
-    const response = await fetch(
-      `https://www.browserbase.com/v1/sessions/${browserbaseSessionId}/debug`,
-      { headers: { 'x-bb-api-key': apiKey } }
-    );
-    if (response.ok) {
-      const data = await response.json();
-      return data.debuggerFullscreenUrl || null;
-    }
-  } catch (error) {
-    console.error('Error fetching debug URL:', error);
-  }
-  return null;
-}
-
-/**
  * POST /api/browser/session - Create a new browser session
  *
  * Body options:
@@ -82,8 +63,10 @@ async function fetchDebugUrl(browserbaseSessionId: string, apiKey: string): Prom
  * - loadHubspotCookies: boolean - load cookies from hubspot-cookies.json (legacy)
  * - websiteSlug: string - load cookies from database for this website
  * - loadFromDb: boolean - whether to load cookies from database (requires websiteSlug)
- * - tabId: string - unique identifier for this browser tab (used for session isolation)
- *                   If not provided, uses in-memory session only (for server-side tools)
+ * - tabId: string - unique identifier for this browser tab (used for Browserbase userMetadata)
+ * 
+ * Session state is managed in-memory on the server and cached in sessionStorage on the client.
+ * No separate database table needed.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -94,27 +77,8 @@ export async function POST(request: NextRequest) {
       loadHubspotCookies = false,
       websiteSlug,
       loadFromDb = false,
-      tabId, // Unique tab ID for session isolation (optional for tools)
+      tabId,
     } = body;
-
-    // If tabId provided, check DB for existing session first
-    if (tabId) {
-      const existingSession = await prisma.browserSession.findUnique({
-        where: { tab_id: tabId },
-      });
-
-      if (existingSession && existingSession.status === 'running') {
-        // Return existing session
-        return NextResponse.json({
-          id: existingSession.id,
-          createdAt: existingSession.created_at,
-          browserbaseSessionId: existingSession.browserbase_session_id,
-          cookiesLoaded: true,
-          cookieCount: 0,
-          cookieSource: 'existing',
-        }, { status: 200 });
-      }
-    }
 
     // Determine which cookies to use (priority: direct cookies > DB > file)
     let finalCookies = cookies;
@@ -140,42 +104,16 @@ export async function POST(request: NextRequest) {
     });
     const start = Date.now();
 
-    // Pass tabId to createSession for Browserbase session isolation
+    // Pass tabId to createSession for Browserbase session isolation (stored in userMetadata)
     const session = await sessionManager.createSession({
       headless,
       cookies: finalCookies,
     }, tabId);
 
-    // If tabId provided, store session in database for serverless persistence
-    if (tabId) {
-      const apiKey = process.env.BROWSERBASE_API_KEY;
-      let debugUrl: string | null = null;
-      if (apiKey && session.browserbaseSessionId) {
-        debugUrl = await fetchDebugUrl(session.browserbaseSessionId, apiKey);
-      }
-
-      const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 min expiry
-      await prisma.browserSession.upsert({
-        where: { tab_id: tabId },
-        create: {
-          tab_id: tabId,
-          browserbase_session_id: session.browserbaseSessionId || session.id,
-          debug_url: debugUrl,
-          status: 'running',
-          expires_at: expiresAt,
-        },
-        update: {
-          browserbase_session_id: session.browserbaseSessionId || session.id,
-          debug_url: debugUrl,
-          status: 'running',
-          expires_at: expiresAt,
-        },
-      });
-    }
-
     logger.setSessionId(session.id);
     logger.logResponse('create_session', session, Date.now() - start);
 
+    // Return session info - client will cache in sessionStorage
     return NextResponse.json({
       ...session,
       cookiesLoaded: !!finalCookies,
@@ -192,31 +130,12 @@ export async function POST(request: NextRequest) {
 /**
  * GET /api/browser/session - Get current session info
  * 
- * Query params:
- * - tabId: string - Filter by tab ID to get this tab's session (optional)
- *                   If provided, checks database; otherwise checks in-memory (for tools)
+ * Checks in-memory session state. Client should cache session info in sessionStorage
+ * and only call this as a fallback.
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    const tabId = searchParams.get('tabId');
-
-    // If tabId provided, check database (serverless-compatible)
-    if (tabId) {
-      const dbSession = await prisma.browserSession.findUnique({
-        where: { tab_id: tabId },
-      });
-
-      if (dbSession && dbSession.status === 'running') {
-        return NextResponse.json({
-          id: dbSession.id,
-          createdAt: dbSession.created_at,
-          browserbaseSessionId: dbSession.browserbase_session_id,
-        });
-      }
-    }
-
-    // Fallback: check in-memory session (for tools on same serverless instance)
+    // Check in-memory session
     const info = sessionManager.getSessionInfo();
     if (info) {
       return NextResponse.json(info);
@@ -234,30 +153,16 @@ export async function GET(request: NextRequest) {
 
 /**
  * DELETE /api/browser/session - Close the current session
- * 
- * Query params:
- * - tabId: string - The tab ID of the session to close
  */
-export async function DELETE(request: NextRequest) {
+export async function DELETE() {
   try {
-    const { searchParams } = new URL(request.url);
-    const tabId = searchParams.get('tabId');
-
-    // Try to close in-memory session
+    // Close in-memory session
     if (sessionManager.hasSession()) {
-      logger.logAction('close_session', { tabId });
+      logger.logAction('close_session', {});
       const start = Date.now();
       await sessionManager.closeSession();
       logger.logResponse('close_session', { success: true }, Date.now() - start);
       logger.clearSessionId();
-    }
-
-    // Mark as closed in database
-    if (tabId) {
-      await prisma.browserSession.updateMany({
-        where: { tab_id: tabId },
-        data: { status: 'closed' },
-      });
     }
 
     return new NextResponse(null, { status: 204 });
@@ -267,4 +172,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
