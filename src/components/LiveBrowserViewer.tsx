@@ -72,7 +72,11 @@ export default function LiveBrowserViewer({
 
     const checkSession = useCallback(async (): Promise<boolean> => {
         try {
-            const response = await fetch("/api/browser/session");
+            // Pass tabId to filter for this tab's session only (prevents collisions)
+            const sessionUrl = tabId 
+                ? `/api/browser/session?tabId=${encodeURIComponent(tabId)}`
+                : "/api/browser/session";
+            const response = await fetch(sessionUrl);
             if (response.ok) {
                 const liveResponse = await fetch("/api/browser/live-url");
                 if (liveResponse.ok) {
@@ -81,7 +85,7 @@ export default function LiveBrowserViewer({
                         console.log("[LiveBrowser] Session connected with live URL");
                         setLiveViewUrl(liveData.liveUrl);
                         setStatus("connected");
-
+                        
                         // Navigate to default URL if provided
                         if (defaultUrl) {
                             console.log(`[LiveBrowser] Navigating to: ${defaultUrl}`);
@@ -101,7 +105,7 @@ export default function LiveBrowserViewer({
             console.error("[LiveBrowser] Error checking session:", err);
             return false;
         }
-    }, [defaultUrl]);
+    }, [defaultUrl, tabId]);
 
     const startSession = useCallback(async () => {
         setIsLoading(true);

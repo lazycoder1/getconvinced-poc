@@ -127,9 +127,15 @@ export async function POST(request: NextRequest) {
  * GET /api/browser/session - Get current session info
  * Checks in-memory state first, then falls back to checking Browserbase API
  * (needed for serverless environments where memory doesn't persist)
+ * 
+ * Query params:
+ * - tabId: string - Filter by tab ID to get only this tab's session (prevents collisions)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const tabId = searchParams.get('tabId');
+
     // First check in-memory state
     const info = sessionManager.getSessionInfo();
     if (info) {
@@ -150,9 +156,21 @@ export async function GET() {
           const data = await response.json();
           const sessions = data.sessions || data || [];
           
-          // Find a running session in our project
+          // Find a running session in our project that matches the tabId
           const runningSession = Array.isArray(sessions)
-            ? sessions.find((s: any) => s.projectId === projectId && s.status === 'RUNNING')
+            ? sessions.find((s: any) => {
+                // Must be in our project and running
+                if (s.projectId !== projectId || s.status !== 'RUNNING') {
+                  return false;
+                }
+                // If tabId is provided, must match the session's userMetadata.tabId
+                if (tabId) {
+                  const metadata = s.userMetadata || {};
+                  return metadata.tabId === tabId;
+                }
+                // If no tabId filter, return first matching session (backward compat)
+                return true;
+              })
             : null;
           
           if (runningSession) {
