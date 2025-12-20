@@ -69,7 +69,16 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
             required: ['name'],
         },
     },
-    // Mode Switching
+    // Mode Tools
+    {
+        name: 'get_demo_mode',
+        description: 'Get the current demo mode (screenshot or live). Use this to check which mode you are in before taking actions.',
+        parameters: {
+            type: 'object',
+            properties: {},
+            required: [],
+        },
+    },
     {
         name: 'switch_demo_mode',
         description: 'Switch between screenshot mode and live browser mode. Use screenshot mode for explanations, live mode for interactive demos.',
@@ -86,24 +95,6 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         },
     },
     // Browser Tools (Live Mode)
-    {
-        name: 'browser_session_status',
-        description: 'Check whether there is an active live browser session.',
-        parameters: {
-            type: 'object',
-            properties: {},
-            required: [],
-        },
-    },
-    {
-        name: 'browser_start_session',
-        description: 'Start a live browser session if one is not already running.',
-        parameters: {
-            type: 'object',
-            properties: {},
-            required: [],
-        },
-    },
     {
         name: 'browser_navigate',
         description: 'Navigate the browser to a URL. Only works in live mode.',
@@ -248,24 +239,6 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
                 },
             },
             required: ['ms'],
-        },
-    },
-    {
-        name: 'browser_check_ready',
-        description: 'Check whether the live website is ready enough for interaction (URL loaded + visible elements). Optionally waits up to timeoutMs.',
-        parameters: {
-            type: 'object',
-            properties: {
-                timeoutMs: {
-                    type: 'number',
-                    description: 'Max time to wait for readiness in milliseconds (default: 8000)',
-                },
-                pollMs: {
-                    type: 'number',
-                    description: 'Polling interval in milliseconds (default: 300)',
-                },
-            },
-            required: [],
         },
     },
 ];

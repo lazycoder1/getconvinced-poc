@@ -77,7 +77,18 @@ function AgentDemoPageContent() {
 
     // Generate a unique tab ID once per page load for session isolation
     // This ensures each browser tab gets its own Browserbase session
-    const [tabId] = useState(() => crypto.randomUUID());
+    // Store in sessionStorage so voice agent tools can find the same session
+    const [tabId] = useState(() => {
+        if (typeof window !== "undefined") {
+            let existingTabId = sessionStorage.getItem("browserTabId");
+            if (!existingTabId) {
+                existingTabId = crypto.randomUUID();
+                sessionStorage.setItem("browserTabId", existingTabId);
+            }
+            return existingTabId;
+        }
+        return crypto.randomUUID();
+    });
 
     const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
     const [loading, setLoading] = useState(true);
@@ -89,8 +100,10 @@ function AgentDemoPageContent() {
     const [chatCollapsed, setChatCollapsed] = useState(true);
     const [logsCollapsed, setLogsCollapsed] = useState(true);
     const [tipsVisible, setTipsVisible] = useState(false);
-    const [chatMessages, setChatMessages] = useState<Array<{ id: string; role: "user" | "assistant"; content: string; timestamp: Date }>>([]);
-    
+    const [chatMessages, setChatMessages] = useState<Array<{ id: string; role: "user" | "assistant"; content: string; timestamp: Date }>>(
+        []
+    );
+
     // Sidebar is visible if either chat or logs is expanded
     const sidebarCollapsed = chatCollapsed && logsCollapsed;
     const agentRef = React.useRef<VoiceAgentHandle | null>(null);
@@ -151,6 +164,9 @@ function AgentDemoPageContent() {
         logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [debugMessages]);
 
+    // Track if we've already started pre-warming to prevent duplicate session creation
+    const preWarmStartedRef = React.useRef(false);
+
     useEffect(() => {
         let progressInterval: NodeJS.Timeout | null = null;
 
@@ -163,41 +179,87 @@ function AgentDemoPageContent() {
 
                 // Start browser pre-warm IMMEDIATELY in parallel (don't await)
                 // This runs alongside config fetch, saving several seconds
-                console.log(`[pre-warm] Starting browser session early (tabId: ${tabId})`);
-                fetch("/api/browser/session", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        headless: false,
-                        loadFromDb: true,
-                        websiteSlug,
-                        tabId, // Unique tab ID for session isolation
-                    }),
-                })
-                    .then(async (res) => {
-                        if (res.ok) {
-                            const data = await res.json();
-                            console.log(`[pre-warm] Browser session started successfully (tabId: ${tabId})`);
-                            
-                            // Store session in sessionStorage so LiveBrowserViewer can find it
-                            // (serverless instances don't share memory, so we cache in browser)
-                            if (data.browserbaseSessionId && data.liveUrl) {
-                                const cacheKey = `browser_session_${tabId}`;
-                                const cached = {
-                                    browserbaseSessionId: data.browserbaseSessionId,
-                                    debugUrl: data.liveUrl,
-                                    createdAt: Date.now(),
-                                };
-                                sessionStorage.setItem(cacheKey, JSON.stringify(cached));
-                                console.log(`[pre-warm] Session cached in sessionStorage`);
+                // Only pre-warm once per tabId to prevent duplicate sessions
+                if (!preWarmStartedRef.current) {
+                    preWarmStartedRef.current = true;
+
+                    // Check if session already exists before creating
+                    const checkExisting = async () => {
+                        try {
+                            const checkRes = await fetch(`/api/browser/session?tabId=${encodeURIComponent(tabId)}`);
+                            if (checkRes.ok) {
+                                const existingData = await checkRes.json();
+                                console.log(`[pre-warm] Session already exists for tabId: ${tabId}, skipping creation`);
+
+                                // Cache existing session
+                                if (existingData.browserbaseSessionId) {
+                                    const liveUrlRes = await fetch(`/api/browser/live-url?tabId=${encodeURIComponent(tabId)}`);
+                                    if (liveUrlRes.ok) {
+                                        const liveData = await liveUrlRes.json();
+                                        if (liveData.liveUrl) {
+                                            const cacheKey = `browser_session_${tabId}`;
+                                            const cached = {
+                                                browserbaseSessionId: existingData.browserbaseSessionId,
+                                                debugUrl: liveData.liveUrl,
+                                                createdAt: Date.now(),
+                                            };
+                                            sessionStorage.setItem(cacheKey, JSON.stringify(cached));
+                                            sessionStorage.setItem("browserbaseSessionId", existingData.browserbaseSessionId);
+                                            console.log(`[pre-warm] Existing session cached in sessionStorage`);
+                                        }
+                                    }
+                                }
+                                return; // Session exists, don't create another
                             }
-                        } else {
-                            console.warn("[pre-warm] Browser session failed to start:", res.status);
+                        } catch (err) {
+                            console.warn("[pre-warm] Error checking existing session:", err);
+                            // Continue to create new session if check fails
                         }
-                    })
-                    .catch((err) => {
-                        console.warn("[pre-warm] Browser session error:", err);
-                    });
+
+                        // No existing session found, create a new one
+                        console.log(`[pre-warm] Starting browser session early (tabId: ${tabId})`);
+                        fetch("/api/browser/session", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                headless: false,
+                                loadFromDb: true,
+                                websiteSlug,
+                                tabId, // Unique tab ID for session isolation
+                            }),
+                        })
+                            .then(async (res) => {
+                                if (res.ok) {
+                                    const data = await res.json();
+                                    console.log(`[pre-warm] Browser session started successfully (tabId: ${tabId})`);
+
+                                    // Store session in sessionStorage so LiveBrowserViewer and voice agent tools can find it
+                                    // (serverless instances don't share memory, so we cache in browser)
+                                    if (data.browserbaseSessionId && data.liveUrl) {
+                                        const cacheKey = `browser_session_${tabId}`;
+                                        const cached = {
+                                            browserbaseSessionId: data.browserbaseSessionId,
+                                            debugUrl: data.liveUrl,
+                                            createdAt: Date.now(),
+                                        };
+                                        sessionStorage.setItem(cacheKey, JSON.stringify(cached));
+                                        // Also store browserbaseSessionId directly for voice agent tools
+                                        sessionStorage.setItem("browserbaseSessionId", data.browserbaseSessionId);
+                                        console.log(`[pre-warm] Session cached in sessionStorage`);
+                                    }
+                                } else {
+                                    console.warn("[pre-warm] Browser session failed to start:", res.status);
+                                }
+                            })
+                            .catch((err) => {
+                                console.warn("[pre-warm] Browser session error:", err);
+                            });
+                    };
+
+                    checkExisting();
+                } else {
+                    console.log(`[pre-warm] Pre-warm already started for tabId: ${tabId}, skipping`);
+                }
 
                 // Simulate progress updates
                 progressInterval = setInterval(() => {
@@ -241,7 +303,7 @@ function AgentDemoPageContent() {
                 setLoadingStage("Ready!");
 
                 // Small delay to show 100% before hiding loader
-                await new Promise(resolve => setTimeout(resolve, 300));
+                await new Promise((resolve) => setTimeout(resolve, 300));
             } catch (err: any) {
                 console.error("Error loading configuration:", err);
 
@@ -297,25 +359,28 @@ function AgentDemoPageContent() {
         // Screenshot and mode switching handled via ScreenshotManager and DemoModeManager events
     }, []);
 
-    const handleStatusChange = React.useCallback((status: {
-        isInitialized?: boolean;
-        isInitializing?: boolean;
-        isConnected?: boolean;
-        isConnecting?: boolean;
-        isMuted?: boolean;
-        isAgentSpeaking?: boolean;
-        isHumanSpeaking?: boolean;
-    }) => {
-        setAgentStatus({
-            isInitialized: status.isInitialized ?? false,
-            isInitializing: status.isInitializing ?? false,
-            isConnected: status.isConnected ?? false,
-            isConnecting: status.isConnecting ?? false,
-            isMuted: status.isMuted ?? false,
-            isAgentSpeaking: status.isAgentSpeaking ?? false,
-            isHumanSpeaking: status.isHumanSpeaking ?? false,
-        });
-    }, []);
+    const handleStatusChange = React.useCallback(
+        (status: {
+            isInitialized?: boolean;
+            isInitializing?: boolean;
+            isConnected?: boolean;
+            isConnecting?: boolean;
+            isMuted?: boolean;
+            isAgentSpeaking?: boolean;
+            isHumanSpeaking?: boolean;
+        }) => {
+            setAgentStatus({
+                isInitialized: status.isInitialized ?? false,
+                isInitializing: status.isInitializing ?? false,
+                isConnected: status.isConnected ?? false,
+                isConnecting: status.isConnecting ?? false,
+                isMuted: status.isMuted ?? false,
+                isAgentSpeaking: status.isAgentSpeaking ?? false,
+                isHumanSpeaking: status.isHumanSpeaking ?? false,
+            });
+        },
+        []
+    );
 
     const handleChatMessage = React.useCallback((message: { id: string; role: "user" | "assistant"; content: string; timestamp: Date }) => {
         setChatMessages((prev) => [...prev, message]);
@@ -329,7 +394,7 @@ function AgentDemoPageContent() {
                         <Loader2 className="mx-auto mb-4 w-12 h-12 text-blue-600 animate-spin" />
                         <h2 className="mb-2 text-xl font-semibold text-gray-900">Loading Agent Demo</h2>
                         <p className="text-sm text-gray-600 mb-6">{loadingStage}</p>
-                        
+
                         {/* Progress Bar */}
                         <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
                             <div
@@ -342,20 +407,56 @@ function AgentDemoPageContent() {
 
                     {/* Loading Steps */}
                     <div className="space-y-2 text-left">
-                        <div className={`flex items-center text-sm ${loadingProgress >= 20 ? 'text-green-600' : 'text-gray-400'}`}>
-                            <div className={`w-2 h-2 rounded-full mr-3 ${loadingProgress >= 20 ? 'bg-green-600' : 'bg-gray-300'}`} />
+                        <div className={`flex items-center text-sm ${loadingProgress >= 20 ? "text-green-600" : "text-gray-400"}`}>
+                            <div className={`w-2 h-2 rounded-full mr-3 ${loadingProgress >= 20 ? "bg-green-600" : "bg-gray-300"}`} />
                             <span>Connecting to server</span>
                         </div>
-                        <div className={`flex items-center text-sm ${loadingProgress >= 60 ? 'text-green-600' : loadingProgress >= 20 ? 'text-blue-600' : 'text-gray-400'}`}>
-                            <div className={`w-2 h-2 rounded-full mr-3 ${loadingProgress >= 60 ? 'bg-green-600' : loadingProgress >= 20 ? 'bg-blue-600 animate-pulse' : 'bg-gray-300'}`} />
+                        <div
+                            className={`flex items-center text-sm ${
+                                loadingProgress >= 60 ? "text-green-600" : loadingProgress >= 20 ? "text-blue-600" : "text-gray-400"
+                            }`}
+                        >
+                            <div
+                                className={`w-2 h-2 rounded-full mr-3 ${
+                                    loadingProgress >= 60
+                                        ? "bg-green-600"
+                                        : loadingProgress >= 20
+                                        ? "bg-blue-600 animate-pulse"
+                                        : "bg-gray-300"
+                                }`}
+                            />
                             <span>Fetching agent configuration</span>
                         </div>
-                        <div className={`flex items-center text-sm ${loadingProgress >= 80 ? 'text-green-600' : loadingProgress >= 60 ? 'text-blue-600' : 'text-gray-400'}`}>
-                            <div className={`w-2 h-2 rounded-full mr-3 ${loadingProgress >= 80 ? 'bg-green-600' : loadingProgress >= 60 ? 'bg-blue-600 animate-pulse' : 'bg-gray-300'}`} />
+                        <div
+                            className={`flex items-center text-sm ${
+                                loadingProgress >= 80 ? "text-green-600" : loadingProgress >= 60 ? "text-blue-600" : "text-gray-400"
+                            }`}
+                        >
+                            <div
+                                className={`w-2 h-2 rounded-full mr-3 ${
+                                    loadingProgress >= 80
+                                        ? "bg-green-600"
+                                        : loadingProgress >= 60
+                                        ? "bg-blue-600 animate-pulse"
+                                        : "bg-gray-300"
+                                }`}
+                            />
                             <span>Loading screenshots and routes</span>
                         </div>
-                        <div className={`flex items-center text-sm ${loadingProgress >= 100 ? 'text-green-600' : loadingProgress >= 80 ? 'text-blue-600' : 'text-gray-400'}`}>
-                            <div className={`w-2 h-2 rounded-full mr-3 ${loadingProgress >= 100 ? 'bg-green-600' : loadingProgress >= 80 ? 'bg-blue-600 animate-pulse' : 'bg-gray-300'}`} />
+                        <div
+                            className={`flex items-center text-sm ${
+                                loadingProgress >= 100 ? "text-green-600" : loadingProgress >= 80 ? "text-blue-600" : "text-gray-400"
+                            }`}
+                        >
+                            <div
+                                className={`w-2 h-2 rounded-full mr-3 ${
+                                    loadingProgress >= 100
+                                        ? "bg-green-600"
+                                        : loadingProgress >= 80
+                                        ? "bg-blue-600 animate-pulse"
+                                        : "bg-gray-300"
+                                }`}
+                            />
                             <span>Finalizing configuration</span>
                         </div>
                     </div>
@@ -461,12 +562,12 @@ function AgentDemoPageContent() {
                         )}
 
                         {/* Live Browser - Always mounted, hidden when not in live mode */}
-                        <div 
+                        <div
                             className="absolute inset-0"
-                            style={{ 
+                            style={{
                                 visibility: demoMode === "live" ? "visible" : "hidden",
                                 pointerEvents: demoMode === "live" ? "auto" : "none",
-                                zIndex: demoMode === "live" ? 1 : 0
+                                zIndex: demoMode === "live" ? 1 : 0,
                             }}
                         >
                             <LiveBrowserViewer
@@ -481,12 +582,12 @@ function AgentDemoPageContent() {
                         </div>
 
                         {/* Screenshot Mode - Visible when not in live mode */}
-                        <div 
+                        <div
                             className="absolute inset-0"
-                            style={{ 
+                            style={{
                                 visibility: demoMode === "live" ? "hidden" : "visible",
                                 pointerEvents: demoMode === "live" ? "none" : "auto",
-                                zIndex: demoMode === "live" ? 0 : 1
+                                zIndex: demoMode === "live" ? 0 : 1,
                             }}
                         >
                             {activeScreenshot ? (
@@ -504,7 +605,8 @@ function AgentDemoPageContent() {
                                         <h3 className="mb-2 text-lg font-semibold">No Screenshot Active</h3>
                                         <p>Start the voice agent to see visual guidance</p>
                                         <p className="mt-2 text-sm">
-                                            Or <button 
+                                            Or{" "}
+                                            <button
                                                 onClick={() => getDemoModeManager().setMode("live")}
                                                 className="text-blue-600 hover:underline"
                                             >
@@ -555,7 +657,7 @@ function AgentDemoPageContent() {
                                     <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
                                         <h3 className="font-semibold text-gray-900 text-sm">Logs ({debugMessages.length})</h3>
                                         <div className="flex items-center gap-2">
-                                            <button 
+                                            <button
                                                 onClick={() => setDebugMessages([])}
                                                 className="text-xs px-2 py-1 rounded text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
                                             >
@@ -574,39 +676,50 @@ function AgentDemoPageContent() {
                                     <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
                                         {debugMessages.length > 0 ? (
                                             debugMessages.map((msg, index) => {
-                                                const isError = msg.source === "error" || msg.message.toLowerCase().includes("error") || msg.message.includes("❌");
-                                                const isTool = msg.source === "tool" || msg.message.includes("TOOL") || msg.message.includes("🔧");
+                                                const isError =
+                                                    msg.source === "error" ||
+                                                    msg.message.toLowerCase().includes("error") ||
+                                                    msg.message.includes("❌");
+                                                const isTool =
+                                                    msg.source === "tool" || msg.message.includes("TOOL") || msg.message.includes("🔧");
                                                 const isUser = msg.message.includes("🧑 You:");
                                                 const isAssistant = msg.message.includes("🗣️ Assistant:");
-                                                
-                                                const borderClass = isError ? "border-l-red-500" : 
-                                                                   isTool ? "border-l-indigo-500" : 
-                                                                   isUser ? "border-l-blue-500" :
-                                                                   isAssistant ? "border-l-emerald-500" : 
-                                                                   "border-l-gray-400";
-                                                const bgClass = isError ? "bg-red-50" : 
-                                                               isTool ? "bg-indigo-50" : 
-                                                               isUser ? "bg-blue-50" :
-                                                               isAssistant ? "bg-emerald-50" : 
-                                                               "bg-gray-50";
-                                                const labelClass = isError ? "text-red-600" : 
-                                                                  isTool ? "text-indigo-600" : 
-                                                                  isUser ? "text-blue-600" :
-                                                                  isAssistant ? "text-emerald-600" : 
-                                                                  "text-gray-500";
-                                                
+
+                                                const borderClass = isError
+                                                    ? "border-l-red-500"
+                                                    : isTool
+                                                    ? "border-l-indigo-500"
+                                                    : isUser
+                                                    ? "border-l-blue-500"
+                                                    : isAssistant
+                                                    ? "border-l-emerald-500"
+                                                    : "border-l-gray-400";
+                                                const bgClass = isError
+                                                    ? "bg-red-50"
+                                                    : isTool
+                                                    ? "bg-indigo-50"
+                                                    : isUser
+                                                    ? "bg-blue-50"
+                                                    : isAssistant
+                                                    ? "bg-emerald-50"
+                                                    : "bg-gray-50";
+                                                const labelClass = isError
+                                                    ? "text-red-600"
+                                                    : isTool
+                                                    ? "text-indigo-600"
+                                                    : isUser
+                                                    ? "text-blue-600"
+                                                    : isAssistant
+                                                    ? "text-emerald-600"
+                                                    : "text-gray-500";
+
                                                 return (
-                                                    <div 
-                                                        key={index} 
-                                                        className={`rounded-lg p-2 border-l-4 ${borderClass} ${bgClass}`}
-                                                    >
+                                                    <div key={index} className={`rounded-lg p-2 border-l-4 ${borderClass} ${bgClass}`}>
                                                         <div className="flex items-center gap-2 text-xs mb-1">
                                                             <span className="text-gray-400 font-mono">
                                                                 {msg.timestamp.toLocaleTimeString()}
                                                             </span>
-                                                            <span className={`font-semibold ${labelClass}`}>
-                                                                {msg.source}
-                                                            </span>
+                                                            <span className={`font-semibold ${labelClass}`}>{msg.source}</span>
                                                         </div>
                                                         <pre className="font-mono text-xs text-gray-700 whitespace-pre-wrap break-all m-0">
                                                             {msg.message}
@@ -639,17 +752,20 @@ function AgentDemoPageContent() {
                         <div className="flex-1">
                             <h3 className="mb-2 font-semibold text-yellow-900">Tips</h3>
                             <div className="text-sm text-yellow-900 space-y-2">
-                                <p><strong>Concept demo:</strong> This is an early prototype for evaluation only and not the final product. Performance, features, and behavior may change.</p>
-                                <p><strong>Current limitation:</strong> For now, you can ask only about HubSpot Contacts.</p>
-                                <p><strong>How to use:</strong> Click "Start Voice Agent" below, then speak your question. Example: "How do I find all contacts that unsubscribed?"</p>
+                                <p>
+                                    <strong>Concept demo:</strong> This is an early prototype for evaluation only and not the final product.
+                                    Performance, features, and behavior may change.
+                                </p>
+                                <p>
+                                    <strong>Current limitation:</strong> For now, you can ask only about HubSpot Contacts.
+                                </p>
+                                <p>
+                                    <strong>How to use:</strong> Click "Start Voice Agent" below, then speak your question. Example: "How do
+                                    I find all contacts that unsubscribed?"
+                                </p>
                             </div>
                         </div>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setTipsVisible(false)}
-                            className="ml-4"
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => setTipsVisible(false)} className="ml-4">
                             <X className="w-4 h-4" />
                         </Button>
                     </div>

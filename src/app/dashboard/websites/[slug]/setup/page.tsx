@@ -58,6 +58,75 @@ export default function WebsiteSetupPage() {
     const params = useParams();
     const websiteSlug = params.slug as string;
 
+    // Generate a unique tab ID for browser session isolation
+    // Use useEffect to ensure websiteSlug is available
+    const [tabId, setTabId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (typeof window !== "undefined" && websiteSlug) {
+            const storageKey = `browserTabId_setup_${websiteSlug}`;
+            let existingTabId = sessionStorage.getItem(storageKey);
+            if (!existingTabId) {
+                existingTabId = crypto.randomUUID();
+                sessionStorage.setItem(storageKey, existingTabId);
+            }
+            setTabId(existingTabId);
+        }
+    }, [websiteSlug]);
+
+    // Pre-warm browser session when tabId is ready
+    useEffect(() => {
+        if (!tabId || !websiteSlug) return;
+
+        // Check if session already exists, if not create one
+        const preWarmSession = async () => {
+            try {
+                // First check if session exists
+                const checkResponse = await fetch(`/api/browser/session?tabId=${encodeURIComponent(tabId)}`);
+                if (checkResponse.ok) {
+                    console.log(`[setup] Browser session already exists for tabId: ${tabId}`);
+                    return;
+                }
+
+                // Create new session
+                console.log(`[setup] Pre-warming browser session for tabId: ${tabId}`);
+                const response = await fetch("/api/browser/session", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        tabId,
+                        headless: false,
+                        loadFromDb: true,
+                        websiteSlug,
+                    }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log(`[setup] Browser session created: ${data.browserbaseSessionId}`);
+                    // Store browserbaseSessionId for later use
+                    if (data.browserbaseSessionId && data.liveUrl) {
+                        const cacheKey = `browser_session_${tabId}`;
+                        sessionStorage.setItem(
+                            cacheKey,
+                            JSON.stringify({
+                                browserbaseSessionId: data.browserbaseSessionId,
+                                debugUrl: data.liveUrl,
+                                createdAt: Date.now(),
+                            })
+                        );
+                    }
+                } else {
+                    console.error(`[setup] Failed to create browser session:`, await response.text());
+                }
+            } catch (err) {
+                console.error(`[setup] Error pre-warming session:`, err);
+            }
+        };
+
+        preWarmSession();
+    }, [tabId, websiteSlug]);
+
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [config, setConfig] = useState<WebsiteConfig | null>(null);
@@ -623,18 +692,25 @@ export default function WebsiteSetupPage() {
 
                         {/* Browser Viewer - Maximized */}
                         <div className="h-[850px] rounded-xl overflow-hidden shadow-lg">
-                            <LiveBrowserViewer
-                                defaultUrl={formData.default_url || formData.base_url || undefined}
-                                loadHubspotCookies={false}
-                                websiteSlug={websiteSlug}
-                                showSaveCookies={true}
-                                onDebugMessage={(type, msg) => console.log(`[${type}] ${msg}`)}
-                                onCookiesSaved={(count) => {
-                                    loadCookieStatus();
-                                    setSuccessMessage(`Saved ${count} cookies!`);
-                                    setTimeout(() => setSuccessMessage(null), 3000);
-                                }}
-                            />
+                            {tabId ? (
+                                <LiveBrowserViewer
+                                    defaultUrl={formData.default_url || formData.base_url || undefined}
+                                    loadHubspotCookies={false}
+                                    websiteSlug={websiteSlug}
+                                    showSaveCookies={true}
+                                    tabId={tabId}
+                                    onDebugMessage={(type, msg) => console.log(`[${type}] ${msg}`)}
+                                    onCookiesSaved={(count) => {
+                                        loadCookieStatus();
+                                        setSuccessMessage(`Saved ${count} cookies!`);
+                                        setTimeout(() => setSuccessMessage(null), 3000);
+                                    }}
+                                />
+                            ) : (
+                                <div className="flex items-center justify-center h-full bg-gray-100">
+                                    <p className="text-gray-500">Initializing browser session...</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </TabsContent>

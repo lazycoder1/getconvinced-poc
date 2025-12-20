@@ -1,3 +1,4 @@
+import 'dotenv/config'; // Load .env file
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getSessionManager } from './browser/index.js';
@@ -5,6 +6,9 @@ import { sessionRoutes } from './routes/session.js';
 import { actionRoutes } from './routes/action.js';
 import { stateRoutes } from './routes/state.js';
 import { liveUrlRoutes } from './routes/live-url.js';
+import { screenshotRoutes } from './routes/screenshot.js';
+import { clicksRoutes } from './routes/clicks.js';
+import { cookiesRoutes } from './routes/cookies.js';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -58,6 +62,9 @@ await fastify.register(sessionRoutes, { prefix: '/session' });
 await fastify.register(actionRoutes, { prefix: '/action' });
 await fastify.register(stateRoutes, { prefix: '/state' });
 await fastify.register(liveUrlRoutes, { prefix: '/live-url' });
+await fastify.register(clicksRoutes, { prefix: '/clicks' });
+await fastify.register(screenshotRoutes, { prefix: '/screenshot' });
+await fastify.register(cookiesRoutes, { prefix: '/cookies' });
 
 // Graceful shutdown
 const shutdown = async () => {
@@ -87,6 +94,9 @@ try {
 ║   - POST /action      - Execute browser action                  ║
 ║   - GET  /state       - Get page state                          ║
 ║   - GET  /live-url    - Get Browserbase live view URL           ║
+║   - GET  /clicks      - Get click events                        ║
+║   - POST /screenshot  - Capture screenshot                      ║
+║   - GET  /cookies     - Get browser cookies                     ║
 ╚════════════════════════════════════════════════════════════════╝
   `);
 } catch (err) {

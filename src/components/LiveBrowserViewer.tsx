@@ -157,7 +157,8 @@ export default function LiveBrowserViewer({
                 const sessionData = await response.json();
 
                 // Fetch live URL
-                const liveResponse = await fetch("/api/browser/live-url");
+                const liveUrlEndpoint = tabId ? `/api/browser/live-url?tabId=${encodeURIComponent(tabId)}` : "/api/browser/live-url";
+                const liveResponse = await fetch(liveUrlEndpoint);
                 if (liveResponse.ok) {
                     const liveData = await liveResponse.json();
                     if (liveData.liveUrl) {
@@ -215,23 +216,37 @@ export default function LiveBrowserViewer({
             const session = await response.json();
             log(`✅ Session started: ${session.id}`);
 
-            const liveResponse = await fetch("/api/browser/live-url");
-            if (liveResponse.ok) {
-                const liveData = await liveResponse.json();
-                if (liveData.liveUrl) {
-                    setLiveViewUrl(liveData.liveUrl);
-                    log(`🖥️ Live browser ready!`);
+            // Use liveUrl from POST response if available (faster, no extra API call)
+            if (session.liveUrl) {
+                setLiveViewUrl(session.liveUrl);
+                log(`🖥️ Live browser ready!`);
 
-                    // Cache session in browser storage (no DB call needed on refresh)
-                    if (tabId && session.browserbaseSessionId) {
-                        setCachedSession(tabId, session.browserbaseSessionId, liveData.liveUrl);
-                        log(`💾 Session cached in browser`);
-                    }
-                } else {
-                    throw new Error("Live view not available - Browserbase required");
+                // Cache session in browser storage (no DB call needed on refresh)
+                if (tabId && session.browserbaseSessionId) {
+                    setCachedSession(tabId, session.browserbaseSessionId, session.liveUrl);
+                    log(`💾 Session cached in browser`);
                 }
             } else {
-                throw new Error("Could not get live browser URL");
+                // Fallback: fetch live URL separately if not in response
+                const liveUrlEndpoint = tabId ? `/api/browser/live-url?tabId=${encodeURIComponent(tabId)}` : "/api/browser/live-url";
+                const liveResponse = await fetch(liveUrlEndpoint);
+                if (liveResponse.ok) {
+                    const liveData = await liveResponse.json();
+                    if (liveData.liveUrl) {
+                        setLiveViewUrl(liveData.liveUrl);
+                        log(`🖥️ Live browser ready!`);
+
+                        // Cache session in browser storage
+                        if (tabId && session.browserbaseSessionId) {
+                            setCachedSession(tabId, session.browserbaseSessionId, liveData.liveUrl);
+                            log(`💾 Session cached in browser`);
+                        }
+                    } else {
+                        throw new Error("Live view not available - Browserbase required");
+                    }
+                } else {
+                    throw new Error("Could not get live browser URL");
+                }
             }
 
             updateStatus("connected");
@@ -278,13 +293,13 @@ export default function LiveBrowserViewer({
     }, [log, updateStatus, tabId]);
 
     const saveCookiesToDb = useCallback(async () => {
-        if (status !== "connected" || !websiteSlug) return;
+        if (status !== "connected" || !websiteSlug || !tabId) return;
 
         setIsSavingCookies(true);
         log("🍪 Saving cookies to database...");
 
         try {
-            const response = await fetch(`/api/dashboard/websites/${websiteSlug}/cookies`, {
+            const response = await fetch(`/api/dashboard/websites/${websiteSlug}/cookies?tabId=${encodeURIComponent(tabId)}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({}),
@@ -305,12 +320,17 @@ export default function LiveBrowserViewer({
         } finally {
             setIsSavingCookies(false);
         }
-    }, [status, websiteSlug, log]);
+    }, [status, websiteSlug, tabId, log]);
 
     // Poll for session until it's ready (handles pre-warm case)
     useEffect(() => {
         // Skip if already connected
         if (status === "connected" && liveViewUrl) {
+            return;
+        }
+
+        // Skip if no tabId yet (wait for it to be set)
+        if (!tabId) {
             return;
         }
 
@@ -340,22 +360,28 @@ export default function LiveBrowserViewer({
         return () => {
             cancelled = true;
         };
-    }, [status, liveViewUrl, checkSession]);
+    }, [status, liveViewUrl, checkSession, tabId]);
 
-    // Poll for click events when connected
+    // Poll for click events when connected (disabled for now - not critical feature)
+    // Click overlay shows where the agent clicked, but adds network overhead
     useEffect(() => {
-        if (status !== "connected" || !showClickOverlay) return;
+        // Skip click polling entirely for now - it's a nice-to-have visual feature
+        // that adds significant network overhead (was 5 req/sec)
+        if (!showClickOverlay || status !== "connected" || !tabId) return;
 
+        // Disabled: Click polling creates too much traffic
+        // If we want to re-enable, use 2000ms+ interval
+        /*
         let lastTimestamp = Date.now();
         const pollInterval = setInterval(async () => {
             try {
-                const response = await fetch(`/api/browser/clicks?since=${lastTimestamp}`);
+                const response = await fetch(`/api/browser/clicks?tabId=${encodeURIComponent(tabId)}&since=${lastTimestamp}`);
                 if (response.ok) {
                     const data = await response.json();
                     if (data.clicks && data.clicks.length > 0) {
                         setClickEvents((prev) => {
                             const newClicks = data.clicks.filter((c: ClickEvent) => !prev.some((p) => p.timestamp === c.timestamp));
-                            return [...prev, ...newClicks].slice(-20); // Keep last 20
+                            return [...prev, ...newClicks].slice(-20);
                         });
                         lastTimestamp = Math.max(...data.clicks.map((c: ClickEvent) => c.timestamp));
                     }
@@ -363,18 +389,18 @@ export default function LiveBrowserViewer({
             } catch (err) {
                 // Silently fail - clicks are not critical
             }
-        }, 200); // Poll every 200ms
+        }, 2000); // Poll every 2 seconds (was 200ms!)
 
-        // Clean up old click events (older than 3 seconds)
         const cleanupInterval = setInterval(() => {
             setClickEvents((prev) => prev.filter((c) => Date.now() - c.timestamp < 3000));
-        }, 500);
+        }, 1000);
 
         return () => {
             clearInterval(pollInterval);
             clearInterval(cleanupInterval);
         };
-    }, [status, showClickOverlay]);
+        */
+    }, [status, showClickOverlay, tabId]);
 
     // Connected state - Full browser with floating toolbar
     if (status === "connected" && liveViewUrl) {

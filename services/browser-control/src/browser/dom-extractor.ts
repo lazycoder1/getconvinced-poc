@@ -313,6 +313,49 @@ export async function extractPageStateCompact(
         }
       }
 
+      // HubSpot (and some CRMs) often render "tables" as div/virtualized rows, not <table>.
+      // If no native tables were found, attempt a fallback extraction from HubSpot-style row ids.
+      if (tables.length === 0) {
+        try {
+          const rows = document.querySelectorAll('tr[data-test-id^="row-"], [data-test-id^="row-"]');
+          const fallbackRows = [];
+          for (let i = 0; i < Math.min(10, rows.length); i++) {
+            const row = rows[i];
+            const testId = row.getAttribute && row.getAttribute('data-test-id');
+            const rowId = testId && testId.startsWith('row-') ? testId.replace('row-', '') : null;
+
+            // Prefer primary link text as "Name" (common in HubSpot lists)
+            let nameText = '';
+            const link = row.querySelector && row.querySelector('a[data-link]');
+            if (link) {
+              nameText = (link.textContent || '').trim();
+            }
+            if (!nameText) {
+              nameText = (row.textContent || '').trim().replace(/\\s+/g, ' ').substring(0, 60);
+            }
+            if (nameText) {
+              fallbackRows.push({ id: rowId, cells: [nameText.substring(0, 60)] });
+            }
+          }
+
+          if (fallbackRows.length > 0) {
+            const tableData = {
+              headers: ['Name'],
+              rowCount: rows.length,
+              rows: fallbackRows
+            };
+            if (fallbackRows.some(r => r.id)) {
+              tableData.patterns = {
+                select: '[data-test-id="checkbox-select-row-{id}"]',
+                preview: '[data-test-id="preview-{id}"]',
+                click: 'a[href*="record/0-1/{id}"]'
+              };
+            }
+            tables.push(tableData);
+          }
+        } catch (e) {}
+      }
+
       // Get brief text summary
       let summary = '';
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {

@@ -67,6 +67,13 @@ export class SessionManager {
     const browserbaseProjectId = process.env.BROWSERBASE_PROJECT_ID;
     const browserbaseRegion = process.env.BROWSERBASE_REGION || 'ap-southeast-1';
 
+    console.log('[SessionManager] Browserbase config:', {
+      useBrowserbase,
+      hasApiKey: !!browserbaseApiKey,
+      hasProjectId: !!browserbaseProjectId,
+      region: browserbaseRegion,
+    });
+
     // Merge Browserbase config with provided options
     const mergedOptions: BrowserControllerOptions = {
       ...options,
@@ -86,16 +93,7 @@ export class SessionManager {
     
     await controller.launch();
 
-    // Navigate to default URL if provided
-    if (defaultUrl) {
-      console.log(`[SessionManager] Navigating to: ${defaultUrl}`);
-      try {
-        await controller.navigate(defaultUrl, { skipState: true });
-      } catch (e) {
-        console.error('[SessionManager] Navigation failed:', e);
-      }
-    }
-
+    // Create session entry FIRST (before navigation) so GET requests can find it
     const entry: SessionEntry = {
       tabId,
       controller,
@@ -104,6 +102,21 @@ export class SessionManager {
     };
 
     this.sessions.set(tabId, entry);
+    console.log(`[SessionManager] Session entry created: ${tabId}`);
+
+    // Navigate to default URL if provided (after session is in map)
+    if (defaultUrl) {
+      console.log(`[SessionManager] Navigating to: ${defaultUrl}`);
+      try {
+        // Use goto directly instead of navigate to avoid state extraction issues
+        const page = controller.getRawPage();
+        await page.goto(defaultUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        console.log(`[SessionManager] Navigation completed`);
+      } catch (e) {
+        console.error('[SessionManager] Navigation failed:', e);
+        // Don't fail session creation if navigation fails
+      }
+    }
     console.log(`[SessionManager] Session created: ${entry.browserbaseSessionId || tabId}`);
 
     return {

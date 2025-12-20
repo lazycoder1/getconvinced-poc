@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getGlobalSessionManager, getBrowserLogger } from '@/lib/browser';
-
-const sessionManager = getGlobalSessionManager();
-const logger = getBrowserLogger();
+import { isRailwayConfigured, proxyScreenshot } from '@/lib/browser/railway-proxy';
 
 /**
  * POST /api/browser/screenshot - Capture a screenshot
  * 
- * Request body (optional):
+ * Proxies to Railway browser control service.
+ * 
+ * Request body:
+ * - tabId: string (required)
+ * - fullPage: boolean (optional)
  * - format: 'base64' | 'binary' (default: 'base64')
  * 
  * Response:
@@ -16,44 +17,45 @@ const logger = getBrowserLogger();
  */
 export async function POST(request: NextRequest) {
   try {
-    if (!sessionManager.hasSession()) {
+    const body = await request.json().catch(() => ({}));
+    const { tabId, fullPage, format } = body;
+
+    if (!tabId) {
       return NextResponse.json(
-        { error: 'No active session' },
-        { status: 404 }
+        { error: 'tabId is required' },
+        { status: 400 }
       );
     }
 
-    const body = await request.json().catch(() => ({}));
-    const format = body.format || 'base64';
-
-    const controller = sessionManager.getController();
-    
-    logger.logAction('screenshot', { format });
-    const start = Date.now();
-
-    const buffer = await controller.screenshot();
-
-    logger.logResponse('screenshot', { size: buffer.length }, Date.now() - start);
-
-    if (format === 'binary') {
-      return new NextResponse(new Uint8Array(buffer), {
-        status: 200,
-        headers: {
-          'Content-Type': 'image/png',
-          'Content-Length': buffer.length.toString(),
-        },
-      });
+    // Check if Railway is configured
+    if (!isRailwayConfigured()) {
+      return NextResponse.json(
+        { error: 'Railway browser service not configured' },
+        { status: 503 }
+      );
     }
 
-    return NextResponse.json({
-      success: true,
-      data: buffer.toString('base64'),
-      contentType: 'image/png',
+    console.log(`[screenshot POST] tabId: ${tabId}, fullPage: ${fullPage}`);
+
+    // Proxy to Railway
+    const result = await proxyScreenshot({
+      tabId,
+      fullPage,
+      format: format || 'base64',
     });
+
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error || 'Failed to capture screenshot' },
+        { status: result.status }
+      );
+    }
+
+    return NextResponse.json(result.data);
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    logger.logError('screenshot', error);
+    console.error('[screenshot POST] Error:', error);
     return NextResponse.json(
       { error: message },
       { status: 500 }
@@ -64,38 +66,66 @@ export async function POST(request: NextRequest) {
 /**
  * GET /api/browser/screenshot - Get screenshot as image
  * 
- * Returns PNG image directly
+ * Query params:
+ * - tabId: string (required)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    if (!sessionManager.hasSession()) {
+    const { searchParams } = new URL(request.url);
+    const tabId = searchParams.get('tabId');
+
+    if (!tabId) {
       return NextResponse.json(
-        { error: 'No active session' },
-        { status: 404 }
+        { error: 'tabId is required' },
+        { status: 400 }
       );
     }
 
-    const controller = sessionManager.getController();
-    
-    logger.logAction('screenshot', { format: 'binary' });
-    const start = Date.now();
+    // Check if Railway is configured
+    if (!isRailwayConfigured()) {
+      return NextResponse.json(
+        { error: 'Railway browser service not configured' },
+        { status: 503 }
+      );
+    }
 
-    const buffer = await controller.screenshot();
+    console.log(`[screenshot GET] tabId: ${tabId}`);
 
-    logger.logResponse('screenshot', { size: buffer.length }, Date.now() - start);
-
-    return new NextResponse(new Uint8Array(buffer), {
-      status: 200,
-      headers: {
-        'Content-Type': 'image/png',
-        'Content-Length': buffer.length.toString(),
-        'Cache-Control': 'no-cache',
-      },
+    // Proxy to Railway (get base64, convert to binary for response)
+    const result = await proxyScreenshot({
+      tabId,
+      format: 'base64',
     });
+
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error || 'Failed to capture screenshot' },
+        { status: result.status }
+      );
+    }
+
+    // Convert base64 to binary response
+    const data = result.data as { data?: string };
+    if (data?.data) {
+      const buffer = Buffer.from(data.data, 'base64');
+      return new NextResponse(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/png',
+          'Content-Length': buffer.length.toString(),
+          'Cache-Control': 'no-cache',
+        },
+      });
+    }
+
+    return NextResponse.json(
+      { error: 'No screenshot data returned' },
+      { status: 500 }
+    );
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    logger.logError('screenshot', error);
+    console.error('[screenshot GET] Error:', error);
     return NextResponse.json(
       { error: message },
       { status: 500 }

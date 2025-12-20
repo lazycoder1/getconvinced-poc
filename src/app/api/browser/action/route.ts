@@ -42,10 +42,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.ok) {
-        return NextResponse.json(
+      return NextResponse.json(
         { success: false, error: result.error || 'Action failed' },
         { status: result.status }
-        );
+      );
     }
 
     return NextResponse.json(result.data);

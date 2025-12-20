@@ -56,7 +56,8 @@ export async function proxyToRailway<T = unknown>(
   if (query) {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined) {
+      // Skip undefined and null values (don't convert to string "null" or "undefined")
+      if (value !== undefined && value !== null) {
         params.append(key, value);
       }
     }
@@ -81,7 +82,7 @@ export async function proxyToRailway<T = unknown>(
     }
 
     const response = await fetch(url, fetchOptions);
-    
+
     let data: T | undefined;
     const contentType = response.headers.get('content-type');
     if (contentType?.includes('application/json')) {
@@ -194,6 +195,55 @@ export async function proxyGetLiveUrl(tabId: string) {
   return proxyToRailway<{ liveUrl?: string; usingBrowserbase?: boolean }>('/live-url', {
     method: 'GET',
     query: { tabId },
+  });
+}
+
+/**
+ * Proxy click events retrieval to Railway
+ */
+export async function proxyGetClicks(params: {
+  tabId: string;
+  since?: number;
+}) {
+  const { tabId, since } = params;
+  return proxyToRailway<{ clicks: unknown[] }>('/clicks', {
+    method: 'GET',
+    query: {
+      tabId,
+      since: since?.toString(),
+    },
+  });
+}
+
+/**
+ * Proxy screenshot capture to Railway
+ */
+export async function proxyScreenshot(params: {
+  tabId: string;
+  fullPage?: boolean;
+  format?: 'base64' | 'binary';
+}) {
+  return proxyToRailway<{ success: boolean; data?: string; contentType?: string }>('/screenshot', {
+    method: 'POST',
+    body: params,
+  });
+}
+
+/**
+ * Proxy cookies retrieval to Railway
+ */
+export async function proxyGetCookies(params: {
+  tabId: string;
+  filterDomain?: string | null;
+}) {
+  const { tabId, filterDomain } = params;
+  return proxyToRailway<{ success: boolean; cookies: unknown[]; cookie_count: number }>('/cookies', {
+    method: 'GET',
+    query: {
+      tabId,
+      // Only include filterDomain if it has a truthy value
+      ...(filterDomain ? { filterDomain } : {}),
+    },
   });
 }
 

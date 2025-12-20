@@ -2,11 +2,10 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getSessionManager, BrowserActionSchema, getBrowserLogger } from '../browser/index.js';
 import type { BrowserAction } from '../browser/types.js';
 
-interface ActionBody {
+type ActionBody = BrowserAction & {
   tabId: string;
   browserbaseSessionId?: string;
-  [key: string]: unknown; // Allow action-specific fields
-}
+};
 
 export async function actionRoutes(fastify: FastifyInstance) {
   const sessionManager = getSessionManager();
@@ -39,8 +38,8 @@ export async function actionRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Validate the action (actionData should match BrowserAction)
-      const parsed = BrowserActionSchema.safeParse(actionData as BrowserAction);
+      // Validate the action
+      const parsed = BrowserActionSchema.safeParse(actionData);
       if (!parsed.success) {
         return reply.status(400).send({
           error: `Invalid action: ${parsed.error.message}`,

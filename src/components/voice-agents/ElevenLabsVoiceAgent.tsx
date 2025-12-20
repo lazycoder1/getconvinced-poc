@@ -35,6 +35,22 @@ const ElevenLabsVoiceAgent = forwardRef<VoiceAgentHandle, VoiceAgentProps>(funct
     const [isHumanSpeaking, setIsHumanSpeaking] = useState(false);
     const humanSpeakingRef = useRef(false);
 
+    // Ensure a stable per-tab browser id exists so Eleven clientTools can route to Railway.
+    useEffect(() => {
+        try {
+            if (typeof window === "undefined") return;
+            const existing = sessionStorage.getItem("browserTabId");
+            if (existing) return;
+            const generated =
+                typeof crypto !== "undefined" && typeof (crypto as any).randomUUID === "function"
+                    ? (crypto as any).randomUUID()
+                    : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+            sessionStorage.setItem("browserTabId", generated);
+        } catch {
+            // Ignore storage issues
+        }
+    }, []);
+
     // Get agent ID from environment variable directly
     const agentId = process.env.NEXT_PUBLIC_ELEVEN_AGENT_ID;
 
@@ -61,7 +77,12 @@ const ElevenLabsVoiceAgent = forwardRef<VoiceAgentHandle, VoiceAgentProps>(funct
                     let url = "";
                     let title = "";
                     try {
-                        const res = await fetch("/api/browser/state?lite=true");
+                        // Include tabId for Railway routing
+                        const tabId = sessionStorage.getItem("browserTabId");
+                        const stateUrl = tabId
+                            ? `/api/browser/state?lite=true&tabId=${encodeURIComponent(tabId)}`
+                            : "/api/browser/state?lite=true";
+                        const res = await fetch(stateUrl);
                         if (res.ok) {
                             const data = await res.json();
                             url = data?.state?.url || "";
@@ -325,7 +346,12 @@ const ElevenLabsVoiceAgent = forwardRef<VoiceAgentHandle, VoiceAgentProps>(funct
                         let url = "";
                         let title = "";
                         if (newMode === "live") {
-                            const res = await fetch("/api/browser/state?lite=true");
+                            // Include tabId for Railway routing
+                            const tabId = sessionStorage.getItem("browserTabId");
+                            const stateUrl = tabId
+                                ? `/api/browser/state?lite=true&tabId=${encodeURIComponent(tabId)}`
+                                : "/api/browser/state?lite=true";
+                            const res = await fetch(stateUrl);
                             if (res.ok) {
                                 const data = await res.json();
                                 url = data?.state?.url || "";

@@ -39,7 +39,47 @@ export async function sessionRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        console.log(`[POST /session] Creating session for tabId: ${tabId}`);
+        // Check if session already exists first to prevent duplicates
+        console.log(`[POST /session] Checking for existing session with tabId: ${tabId}`);
+        if (sessionManager.hasSession(tabId)) {
+          console.log(`[POST /session] ✓ Session already exists for tabId: ${tabId}, returning existing session`);
+          
+          const existingSession = sessionManager.getSessionInfo(tabId);
+          if (existingSession) {
+            // Update cookies if provided
+            if (cookies && cookies.length > 0) {
+              const controller = sessionManager.getController(tabId);
+              if (controller) {
+                try {
+                  await controller.setCookies(cookies);
+                  console.log(`[POST /session] Updated ${cookies.length} cookies in existing session`);
+                } catch (e) {
+                  console.error('[POST /session] Failed to update cookies:', e);
+                }
+              }
+            }
+
+            // Get live URL if available
+            let liveUrl: string | null = null;
+            const controller = sessionManager.getController(tabId);
+            if (controller) {
+              try {
+                liveUrl = await controller.getBrowserbaseLiveViewUrl();
+              } catch (e) {
+                console.error('[POST /session] Failed to get live URL:', e);
+              }
+            }
+
+            return reply.status(200).send({
+              ...existingSession,
+              liveUrl,
+              cookiesLoaded: cookies && cookies.length > 0,
+              cookieCount: cookies?.length || 0,
+            });
+          }
+        }
+
+        console.log(`[POST /session] Creating new session for tabId: ${tabId}`);
         
         const session = await sessionManager.createSession(
           tabId,
@@ -89,10 +129,15 @@ export async function sessionRoutes(fastify: FastifyInstance) {
       try {
         console.log(`[GET /session] Looking up tabId: ${tabId}`);
 
+        // Check if session exists and is actually launched
+        if (!sessionManager.hasSession(tabId)) {
+          console.log(`[GET /session] No active session found for tabId: ${tabId}`);
+          return reply.status(404).send({ error: 'No active session' });
+        }
+
         const sessionInfo = sessionManager.getSessionInfo(tabId);
-        
         if (!sessionInfo) {
-          console.log(`[GET /session] No session found for tabId: ${tabId}`);
+          console.log(`[GET /session] Session exists but info is null for tabId: ${tabId}`);
           return reply.status(404).send({ error: 'No active session' });
         }
 

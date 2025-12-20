@@ -26,18 +26,45 @@ function debugLog(action: string, data: Record<string, unknown>) {
   console.log(`[${timestamp}] 🔧 ${action}:`, JSON.stringify(data, null, 2));
 }
 
+/**
+ * Get cached session info from sessionStorage (client-side)
+ * Required for Railway routing - all API calls need tabId
+ */
+function getCachedSessionInfo(): { tabId?: string; browserbaseSessionId?: string } {
+  if (typeof window === 'undefined') return {};
+  try {
+    const tabId = sessionStorage.getItem('browserTabId');
+    const browserbaseSessionId = sessionStorage.getItem('browserbaseSessionId');
+    return {
+      tabId: tabId || undefined,
+      browserbaseSessionId: browserbaseSessionId || undefined
+    };
+  } catch {
+    return {};
+  }
+}
+
 // Helper to make API calls with detailed error handling
+// Includes tabId for Railway routing
 async function browserApiCall(endpoint: string, body?: Record<string, unknown>) {
+  // Include session info in all API calls for Railway routing
+  const cached = getCachedSessionInfo();
+  const enrichedBody = body ? {
+    ...body,
+    tabId: cached.tabId,
+    browserbaseSessionId: cached.browserbaseSessionId,
+  } : undefined;
+
   const url = `${getApiBase()}/api/browser/${endpoint}`;
   const startTime = Date.now();
   
-  debugLog('API_CALL_START', { endpoint, url, body });
+  debugLog('API_CALL_START', { endpoint, url, body: enrichedBody });
   
   try {
     const res = await fetch(url, {
-      method: body ? 'POST' : 'GET',
+      method: enrichedBody ? 'POST' : 'GET',
       headers: { 'Content-Type': 'application/json' },
-      body: body ? JSON.stringify(body) : undefined,
+      body: enrichedBody ? JSON.stringify(enrichedBody) : undefined,
     });
     
     const duration = Date.now() - startTime;
@@ -83,8 +110,13 @@ async function browserApiCall(endpoint: string, body?: Record<string, unknown>) 
 }
 
 // Helper to get page state (uses GET endpoint)
+// Includes tabId for Railway routing
 async function getPageState(): Promise<Record<string, unknown>> {
-  const url = `${getApiBase()}/api/browser/state?compact=true`;
+  const cached = getCachedSessionInfo();
+  const params = new URLSearchParams({ compact: 'true' });
+  if (cached.tabId) params.set('tabId', cached.tabId);
+
+  const url = `${getApiBase()}/api/browser/state?${params.toString()}`;
   const startTime = Date.now();
   
   debugLog('GET_STATE_START', { url });

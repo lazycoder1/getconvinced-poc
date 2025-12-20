@@ -53,7 +53,10 @@ async function browserApiCall(endpoint: string, body?: Record<string, unknown>) 
 
 // Helper to get page state
 async function getPageState(): Promise<Record<string, unknown>> {
-    const url = `${getApiBase()}/api/browser/state?compact=true`;
+    const cached = getCachedSessionInfo();
+    const params = new URLSearchParams({ compact: 'true' });
+    if (cached.tabId) params.set('tabId', cached.tabId);
+    const url = `${getApiBase()}/api/browser/state?${params.toString()}`;
 
     try {
         const res = await fetch(url);
@@ -72,7 +75,14 @@ async function getPageState(): Promise<Record<string, unknown>> {
 function getCachedSessionInfo(): { tabId?: string; browserbaseSessionId?: string } {
     if (typeof window === 'undefined') return {};
     try {
-        const tabId = sessionStorage.getItem('browserTabId');
+        let tabId = sessionStorage.getItem('browserTabId');
+        if (!tabId) {
+            tabId =
+                typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function'
+                    ? (crypto as any).randomUUID()
+                    : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+            sessionStorage.setItem('browserTabId', tabId as string);
+        }
         const browserbaseSessionId = sessionStorage.getItem('browserbaseSessionId');
         return {
             tabId: tabId || undefined,
@@ -101,77 +111,6 @@ async function getSessionInfo(): Promise<{ success: boolean; hasSession: boolean
     } catch (err) {
         return { success: false, hasSession: false, error: String(err) };
     }
-}
-
-/**
- * Wait for a pre-warmed session to be ready (poll instead of creating new)
- * This prevents creating duplicate sessions when the page pre-warms on load
- */
-async function waitForSession(maxWaitMs: number = 10000): Promise<{ success: boolean; info?: any; error?: string }> {
-    const startTime = Date.now();
-    const pollInterval = 500;
-
-    while (Date.now() - startTime < maxWaitMs) {
-        const session = await getSessionInfo();
-        if (session.hasSession) {
-            console.log(`[tools] Found pre-warmed session after ${Date.now() - startTime}ms`);
-            return { success: true, info: session.info };
-        }
-        await sleep(pollInterval);
-    }
-
-    return { success: false, error: `No session found after ${maxWaitMs}ms` };
-}
-
-async function startBrowserSession(websiteSlug?: string): Promise<Record<string, unknown>> {
-    const url = `${getApiBase()}/api/browser/session`;
-    const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            headless: false,
-            // Prefer DB cookies if available
-            loadFromDb: !!websiteSlug,
-            websiteSlug,
-            // Keep legacy hubspot cookie loading as fallback (won't hurt if file doesn't exist)
-            loadHubspotCookies: websiteSlug === "hubspot",
-        }),
-    });
-    if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`Failed to start browser session: ${t}`);
-    }
-    return await res.json();
-}
-
-function sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function isPageReadyEnough(compactStateResult: any): { ready: boolean; reason: string } {
-    // compact endpoint returns: { success: true, stateType, state }
-    if (!compactStateResult || !compactStateResult.success) {
-        return { ready: false, reason: "state_not_available" };
-    }
-    const state = compactStateResult.state || {};
-    const url = state.url;
-    const title = state.title;
-
-    // We consider it "ready enough" if we have a URL + at least some visible UI primitives
-    const buttons = Array.isArray(state.buttons) ? state.buttons.length : 0;
-    const links = Array.isArray(state.links) ? state.links.length : 0;
-    const inputs = Array.isArray(state.inputs) ? state.inputs.length : 0;
-    const tables = Array.isArray(state.tables) ? state.tables.length : 0;
-
-    if (!url) return { ready: false, reason: "missing_url" };
-    if (!title && buttons + links + inputs + tables === 0) return { ready: false, reason: "no_visible_elements_yet" };
-
-    // Avoid false-positive during browser "about:blank" transitions
-    if (typeof url === "string" && (url === "about:blank" || url.startsWith("chrome://"))) {
-        return { ready: false, reason: "browser_transition" };
-    }
-
-    return { ready: true, reason: "ok" };
 }
 
 // Summarize tool results for context efficiency
@@ -232,85 +171,6 @@ export function convertBrowserToolsToElevenLabs(
     browserConfig?: BrowserConfig
 ): Record<string, (...args: any[]) => Promise<string>> {
     const tools: Record<string, (...args: any[]) => Promise<string>> = {};
-    const websiteSlugSafe = websiteSlug;
-
-    // Session status tool (lets agent know if live browser exists)
-    tools.browser_session_status = async () => {
-        const result = await getSessionInfo();
-        return JSON.stringify(result);
-    };
-
-    // Start session tool (agent can bring up live browser without the UI button)
-    tools.browser_start_session = async () => {
-        try {
-            const session = await startBrowserSession(websiteSlugSafe);
-            return JSON.stringify({ success: true, session });
-        } catch (error: any) {
-            return JSON.stringify({ success: false, error: error?.message || String(error) });
-        }
-    };
-
-    /**
-     * Check if the website is "ready enough" for interactions:
-     * - live browser session exists (or can be started)
-     * - /api/browser/state?compact=true returns url/title and some visible elements
-     *
-     * This is intentionally heuristic (fast + practical).
-     */
-    tools.browser_check_ready = async ({ timeoutMs, pollMs }: { timeoutMs?: number; pollMs?: number } = {}) => {
-        const timeout = Math.max(500, Math.min(60_000, timeoutMs ?? 8_000));
-        const poll = Math.max(100, Math.min(2_000, pollMs ?? 300));
-        const startedAt = Date.now();
-
-        let mode: string | undefined;
-        try {
-            const { getDemoModeManager } = await import("@/lib/demo-mode");
-            mode = getDemoModeManager().getMode();
-        } catch { }
-
-        // If in live mode, wait for pre-warmed session (don't create new one)
-        if (mode === "live") {
-            const session = await getSessionInfo();
-            if (!session.hasSession) {
-                // Wait for pre-warmed session instead of creating new
-                const waitResult = await waitForSession(8000);
-                if (!waitResult.success) {
-                    return JSON.stringify({
-                        ready: false,
-                        mode,
-                        reason: "no_session",
-                        error: waitResult.error || "Session not ready",
-                    });
-                }
-            }
-        }
-
-        let lastState: any = null;
-        let lastReason = "initial";
-        while (Date.now() - startedAt < timeout) {
-            lastState = await getPageState();
-            const verdict = isPageReadyEnough(lastState);
-            lastReason = verdict.reason;
-            if (verdict.ready) {
-                return JSON.stringify({
-                    ready: true,
-                    mode,
-                    reason: verdict.reason,
-                    state: summarizeResult("browser_get_state", lastState),
-                    waitedMs: Date.now() - startedAt,
-                });
-            }
-            await sleep(poll);
-        }
-
-        return JSON.stringify({
-            ready: false,
-            mode,
-            reason: lastReason,
-            state: lastState ? summarizeResult("browser_get_state", lastState) : undefined,
-            waitedMs: Date.now() - startedAt,
-        });
-    };
 
     // Add dynamic navigation tool if routes are available
     if (browserConfig?.navigation_routes && browserConfig.navigation_routes.length > 0) {
@@ -396,18 +256,15 @@ export function convertBrowserToolsToElevenLabs(
 
         const session = await getSessionInfo();
 
-        // If user is in live mode but no session exists, wait for pre-warmed session
-        // (mode is runtime string; keep comparison permissive)
+        // If in live mode but no session exists, immediately return error (no waiting, no auto-start)
         if (mode === "live" && !session.hasSession) {
-            const waitResult = await waitForSession(8000);
-            if (!waitResult.success) {
-                return JSON.stringify({
-                    success: false,
-                    mode,
-                    session,
-                    error: `Live mode but no browser session. ${waitResult.error || "Session not ready"}`,
-                });
-            }
+            return JSON.stringify({
+                success: false,
+                mode,
+                session,
+                error: "No active browser session. Please refresh the page to create a new session.",
+                needsUserAction: true,
+            });
         }
 
         const result = await getPageState();
@@ -464,38 +321,26 @@ export function convertScreenshotToolsToElevenLabs(
         manager.setMode(mode);
         const modeNote = mode === "live" ? "You can now control the browser." : "Showing screenshots.";
 
-        // If switching to live, wait for pre-warmed session and return current page state
+        // If switching to live, check if a session exists (no auto-start, no waiting)
         if (mode === "live") {
-            try {
-                const session = await getSessionInfo();
-                if (!session.hasSession) {
-                    const waitResult = await waitForSession(8000);
-                    if (!waitResult.success) {
-                        return JSON.stringify({
-                            success: false,
-                            previousMode,
-                            newMode: mode,
-                            error: waitResult.error || "Session not ready",
-                        });
-                    }
-                }
-                const state = await getPageState();
-                return JSON.stringify({
-                    success: true,
-                    previousMode,
-                    currentMode: mode,
-                    state: summarizeResult("browser_get_state", state),
-                    message: `Switched to live mode. Live browser is ready.`,
-                });
-            } catch (e: any) {
+            const session = await getSessionInfo();
+            if (!session.hasSession) {
                 return JSON.stringify({
                     success: false,
                     previousMode,
-                    currentMode: mode,
-                    error: e?.message || String(e),
-                    message: `Switched to live mode but could not start browser session.`,
+                    newMode: mode,
+                    needsUserAction: true,
+                    error: "No active browser session. Please refresh the page to create a new session.",
                 });
             }
+            const state = await getPageState();
+            return JSON.stringify({
+                success: true,
+                previousMode,
+                currentMode: mode,
+                state: summarizeResult("browser_get_state", state),
+                message: `Switched to live mode. Live browser is ready.`,
+            });
         }
 
         return JSON.stringify({

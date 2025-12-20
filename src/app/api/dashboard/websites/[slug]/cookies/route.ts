@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/database';
-import { getGlobalSessionManager } from '@/lib/browser';
+import { isRailwayConfigured, proxyGetCookies } from '@/lib/browser/railway-proxy';
+
+// Type workaround for stale Prisma types
+type WebsiteWithConfig = {
+  id: string;
+  config?: {
+    cookies_json?: unknown;
+    cookies_updated?: Date | null;
+    auth_domain?: string | null;
+  } | null;
+};
 
 /**
  * GET /api/dashboard/websites/[slug]/cookies
@@ -13,11 +23,9 @@ export async function GET(
   try {
     const { slug } = await params;
 
-    const website = await prisma.website.findUnique({
+    const website = await (prisma.website.findUnique as (args: unknown) => Promise<WebsiteWithConfig | null>)({
       where: { slug },
-      include: {
-        config: true,
-      },
+      include: { config: true },
     });
 
     if (!website) {
@@ -59,6 +67,12 @@ export async function GET(
 /**
  * POST /api/dashboard/websites/[slug]/cookies
  * Save cookies from current browser session to database
+ * 
+ * Query params:
+ * - tabId: string (required) - Tab ID for the browser session
+ * 
+ * Body:
+ * - filter_domain: string (optional) - Domain to filter cookies by
  */
 export async function POST(
   request: NextRequest,
@@ -66,11 +80,28 @@ export async function POST(
 ) {
   try {
     const { slug } = await params;
+    const { searchParams } = new URL(request.url);
+    const tabId = searchParams.get('tabId');
     const body = await request.json().catch(() => ({}));
     const { filter_domain } = body;
 
+    if (!tabId) {
+      return NextResponse.json(
+        { error: 'tabId is required as a query parameter' },
+        { status: 400 }
+      );
+    }
+
+    // Check if Railway is configured
+    if (!isRailwayConfigured()) {
+      return NextResponse.json(
+        { error: 'Railway browser service not configured' },
+        { status: 503 }
+      );
+    }
+
     // Find website
-    const website = await prisma.website.findUnique({
+    const website = await (prisma.website.findUnique as (args: unknown) => Promise<WebsiteWithConfig | null>)({
       where: { slug },
       include: { config: true },
     });
@@ -82,32 +113,26 @@ export async function POST(
       );
     }
 
-    // Get browser session
-    const sessionManager = getGlobalSessionManager();
-    if (!sessionManager.hasSession()) {
-      return NextResponse.json(
-        { error: 'No active browser session. Start a browser session first.' },
-        { status: 400 }
-      );
-    }
-
-    const controller = sessionManager.getController();
-    
-    // Get cookies from browser
-    let cookies = await controller.getCookies();
-
-    // Filter by domain if specified (or use auth_domain from config)
+    // Get cookies from Railway browser session
     const domainFilter = filter_domain || website.config?.auth_domain;
-    if (domainFilter) {
-      const filterPattern = domainFilter.replace(/^\*\./, '');
-      cookies = cookies.filter(c => 
-        c.domain.endsWith(filterPattern) || c.domain === filterPattern
+
+    const cookieResult = await proxyGetCookies({
+      tabId,
+      filterDomain: domainFilter,
+    });
+
+    if (!cookieResult.ok) {
+      return NextResponse.json(
+        { error: cookieResult.error || 'No active browser session. Start a browser session first.' },
+        { status: cookieResult.status }
       );
     }
+
+    const cookies = cookieResult.data?.cookies || [];
 
     if (cookies.length === 0) {
       return NextResponse.json(
-        { 
+        {
           error: 'No cookies found. Make sure you are logged in to the website.',
           filter_domain: domainFilter,
         },
@@ -115,8 +140,9 @@ export async function POST(
       );
     }
 
-    // Upsert config with cookies
-    const config = await prisma.websiteConfig.upsert({
+    // Upsert config with cookies (use type assertion for stale Prisma types)
+    const upsertFn = (prisma as unknown as { websiteConfig: { upsert: (args: unknown) => Promise<{ cookies_updated?: Date | null; auth_domain?: string | null }> } }).websiteConfig.upsert;
+    const config = await upsertFn({
       where: { website_id: website.id },
       update: {
         cookies_json: cookies as unknown as object,
@@ -159,7 +185,7 @@ export async function DELETE(
   try {
     const { slug } = await params;
 
-    const website = await prisma.website.findUnique({
+    const website = await (prisma.website.findUnique as (args: unknown) => Promise<WebsiteWithConfig | null>)({
       where: { slug },
       include: { config: true },
     });
@@ -178,7 +204,8 @@ export async function DELETE(
       });
     }
 
-    await prisma.websiteConfig.update({
+    const updateFn = (prisma as unknown as { websiteConfig: { update: (args: unknown) => Promise<void> } }).websiteConfig.update;
+    await updateFn({
       where: { website_id: website.id },
       data: {
         cookies_json: undefined,
