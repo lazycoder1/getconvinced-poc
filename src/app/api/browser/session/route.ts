@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
     if (sessionManager.hasSession()) {
       const controller = sessionManager.getController();
       liveUrl = await controller.getBrowserbaseLiveViewUrl();
-      
+
       // Navigate to default URL - get from body or from website config in DB
       let defaultUrl = body.defaultUrl;
       if (!defaultUrl && websiteSlug) {
@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
           // Ignore, will use fallback
         }
       }
-      
+
       if (defaultUrl) {
         try {
           console.log(`[session] Navigating to default URL: ${defaultUrl}`);

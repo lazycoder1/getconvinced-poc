@@ -5,6 +5,61 @@ const sessionManager = getGlobalSessionManager();
 const logger = getBrowserLogger();
 
 /**
+ * Try to reconnect to an existing Browserbase session
+ * Used when action endpoint hits a different serverless instance
+ */
+async function ensureSession(): Promise<boolean> {
+  // Already have session in memory
+  if (sessionManager.hasSession()) {
+    return true;
+  }
+
+  // Try to find and reconnect to a running session
+  const apiKey = process.env.BROWSERBASE_API_KEY;
+  const projectId = process.env.BROWSERBASE_PROJECT_ID;
+  if (!apiKey || !projectId) return false;
+
+  try {
+    const response = await fetch('https://www.browserbase.com/v1/sessions?status=RUNNING', {
+      headers: { 'x-bb-api-key': apiKey },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const sessions = data.sessions || data || [];
+      const runningSession = Array.isArray(sessions)
+        ? sessions.find((s: any) => s.projectId === projectId && s.status === 'RUNNING')
+        : null;
+
+      if (runningSession) {
+        console.log(`[action] Reconnecting to session: ${runningSession.id}`);
+        const { BrowserController } = await import('@/lib/browser/controller');
+        const controller = new BrowserController({
+          useBrowserbase: true,
+          browserbaseConfig: { apiKey, projectId },
+        });
+
+        const reconnected = await controller.reconnectToBrowserbaseSession(runningSession.id);
+        if (reconnected) {
+          // @ts-ignore - store in session manager
+          sessionManager['session'] = {
+            id: runningSession.id,
+            controller,
+            createdAt: new Date(),
+            browserbaseSessionId: runningSession.id,
+          };
+          console.log(`[action] Successfully reconnected`);
+          return true;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[action] Failed to reconnect:', error);
+  }
+  return false;
+}
+
+/**
  * POST /api/browser/action - Execute a browser action
  * 
  * Supported actions:
@@ -27,7 +82,9 @@ const logger = getBrowserLogger();
  */
 export async function POST(request: NextRequest) {
   try {
-    if (!sessionManager.hasSession()) {
+    // Ensure we have a session (reconnect if needed for serverless)
+    const hasSession = await ensureSession();
+    if (!hasSession) {
       return NextResponse.json(
         { error: 'No active session. Create one first via POST /api/browser/session' },
         { status: 404 }
