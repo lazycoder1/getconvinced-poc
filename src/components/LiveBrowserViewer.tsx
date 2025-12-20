@@ -104,6 +104,7 @@ export default function LiveBrowserViewer({
     const onStatusChangeRef = useRef(onStatusChange);
     const onDebugMessageRef = useRef(onDebugMessage);
     const onCookiesSavedRef = useRef(onCookiesSaved);
+    const hasNavigatedRef = useRef(false); // Track if we've navigated to defaultUrl
 
     useEffect(() => {
         onStatusChangeRef.current = onStatusChange;
@@ -123,6 +124,19 @@ export default function LiveBrowserViewer({
 
     const checkSession = useCallback(async (): Promise<boolean> => {
         try {
+            // Helper to navigate to default URL (only once)
+            const navigateToDefault = async () => {
+                if (defaultUrl && !hasNavigatedRef.current) {
+                    hasNavigatedRef.current = true;
+                    console.log(`[LiveBrowser] Navigating to: ${defaultUrl}`);
+                    await fetch("/api/browser/action", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ type: "navigate", url: defaultUrl }),
+                    });
+                }
+            };
+
             // First check browser cache (no API call needed!)
             if (tabId) {
                 const cached = getCachedSession(tabId);
@@ -130,6 +144,8 @@ export default function LiveBrowserViewer({
                     console.log("[LiveBrowser] Using cached session (no DB call)");
                     setLiveViewUrl(cached.debugUrl);
                     setStatus("connected");
+                    // Navigate to default URL
+                    await navigateToDefault();
                     return true;
                 }
             }
@@ -139,7 +155,7 @@ export default function LiveBrowserViewer({
             const response = await fetch(sessionUrl);
             if (response.ok) {
                 const sessionData = await response.json();
-                
+
                 // Also pass tabId when fetching live URL
                 const liveUrlEndpoint = tabId ? `/api/browser/live-url?tabId=${encodeURIComponent(tabId)}` : "/api/browser/live-url";
                 const liveResponse = await fetch(liveUrlEndpoint);
@@ -155,15 +171,8 @@ export default function LiveBrowserViewer({
                             setCachedSession(tabId, sessionData.browserbaseSessionId, liveData.liveUrl);
                         }
 
-                        // Navigate to default URL if provided
-                        if (defaultUrl) {
-                            console.log(`[LiveBrowser] Navigating to: ${defaultUrl}`);
-                            await fetch("/api/browser/action", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ type: "navigate", url: defaultUrl }),
-                            });
-                        }
+                        // Navigate to default URL
+                        await navigateToDefault();
                         return true;
                     }
                 }
@@ -214,7 +223,7 @@ export default function LiveBrowserViewer({
                 if (liveData.liveUrl) {
                     setLiveViewUrl(liveData.liveUrl);
                     log(`🖥️ Live browser ready!`);
-                    
+
                     // Cache session in browser storage (no DB call needed on refresh)
                     if (tabId && session.browserbaseSessionId) {
                         setCachedSession(tabId, session.browserbaseSessionId, liveData.liveUrl);
@@ -266,6 +275,7 @@ export default function LiveBrowserViewer({
             setIsLoading(false);
             setLiveViewUrl(null);
             updateStatus("disconnected");
+            hasNavigatedRef.current = false; // Reset so next session navigates
         }
     }, [log, updateStatus, tabId]);
 
