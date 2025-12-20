@@ -72,6 +72,26 @@ async function getSessionInfo(): Promise<{ success: boolean; hasSession: boolean
     }
 }
 
+/**
+ * Wait for a pre-warmed session to be ready (poll instead of creating new)
+ * This prevents creating duplicate sessions when the page pre-warms on load
+ */
+async function waitForSession(maxWaitMs: number = 10000): Promise<{ success: boolean; info?: any; error?: string }> {
+    const startTime = Date.now();
+    const pollInterval = 500;
+
+    while (Date.now() - startTime < maxWaitMs) {
+        const session = await getSessionInfo();
+        if (session.hasSession) {
+            console.log(`[tools] Found pre-warmed session after ${Date.now() - startTime}ms`);
+            return { success: true, info: session.info };
+        }
+        await sleep(pollInterval);
+    }
+
+    return { success: false, error: `No session found after ${maxWaitMs}ms` };
+}
+
 async function startBrowserSession(websiteSlug?: string): Promise<Record<string, unknown>> {
     const url = `${getApiBase()}/api/browser/session`;
     const res = await fetch(url, {
@@ -217,18 +237,18 @@ export function convertBrowserToolsToElevenLabs(
             mode = getDemoModeManager().getMode();
         } catch { }
 
-        // If in live mode, ensure a session exists.
+        // If in live mode, wait for pre-warmed session (don't create new one)
         if (mode === "live") {
             const session = await getSessionInfo();
             if (!session.hasSession) {
-                try {
-                    await startBrowserSession(websiteSlugSafe);
-                } catch (e: any) {
+                // Wait for pre-warmed session instead of creating new
+                const waitResult = await waitForSession(8000);
+                if (!waitResult.success) {
                     return JSON.stringify({
                         ready: false,
                         mode,
                         reason: "no_session",
-                        error: e?.message || String(e),
+                        error: waitResult.error || "Session not ready",
                     });
                 }
             }
@@ -345,17 +365,16 @@ export function convertBrowserToolsToElevenLabs(
 
         const session = await getSessionInfo();
 
-        // If user is in live mode but no session exists, start one automatically
+        // If user is in live mode but no session exists, wait for pre-warmed session
         // (mode is runtime string; keep comparison permissive)
         if (mode === "live" && !session.hasSession) {
-            try {
-                await startBrowserSession(websiteSlugSafe);
-            } catch (e: any) {
+            const waitResult = await waitForSession(8000);
+            if (!waitResult.success) {
                 return JSON.stringify({
                     success: false,
                     mode,
                     session,
-                    error: `Live mode but no browser session. Could not start session: ${e?.message || String(e)}`,
+                    error: `Live mode but no browser session. ${waitResult.error || "Session not ready"}`,
                 });
             }
         }
@@ -414,12 +433,20 @@ export function convertScreenshotToolsToElevenLabs(
         manager.setMode(mode);
         const modeNote = mode === "live" ? "You can now control the browser." : "Showing screenshots.";
 
-        // If switching to live, attempt to start session and return current page state
+        // If switching to live, wait for pre-warmed session and return current page state
         if (mode === "live") {
             try {
                 const session = await getSessionInfo();
                 if (!session.hasSession) {
-                    await startBrowserSession(websiteSlug);
+                    const waitResult = await waitForSession(8000);
+                    if (!waitResult.success) {
+                        return JSON.stringify({
+                            success: false,
+                            previousMode,
+                            newMode: mode,
+                            error: waitResult.error || "Session not ready",
+                        });
+                    }
                 }
                 const state = await getPageState();
                 return JSON.stringify({

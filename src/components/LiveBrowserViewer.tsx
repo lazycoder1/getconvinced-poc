@@ -50,7 +50,6 @@ export default function LiveBrowserViewer({
     const [clickEvents, setClickEvents] = useState<ClickEvent[]>([]);
     const [showClickOverlay, setShowClickOverlay] = useState(true);
 
-    const hasCheckedSessionRef = useRef(false);
     const onStatusChangeRef = useRef(onStatusChange);
     const onDebugMessageRef = useRef(onDebugMessage);
     const onCookiesSavedRef = useRef(onCookiesSaved);
@@ -79,16 +78,30 @@ export default function LiveBrowserViewer({
                 if (liveResponse.ok) {
                     const liveData = await liveResponse.json();
                     if (liveData.liveUrl) {
+                        console.log("[LiveBrowser] Session connected with live URL");
                         setLiveViewUrl(liveData.liveUrl);
+                        setStatus("connected");
+
+                        // Navigate to default URL if provided
+                        if (defaultUrl) {
+                            console.log(`[LiveBrowser] Navigating to: ${defaultUrl}`);
+                            await fetch("/api/browser/action", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ type: "navigate", url: defaultUrl }),
+                            });
+                        }
+                        return true;
                     }
                 }
                 return true;
             }
             return false;
-        } catch {
+        } catch (err) {
+            console.error("[LiveBrowser] Error checking session:", err);
             return false;
         }
-    }, []);
+    }, [defaultUrl]);
 
     const startSession = useCallback(async () => {
         setIsLoading(true);
@@ -202,48 +215,38 @@ export default function LiveBrowserViewer({
 
     // Poll for session until it's ready (handles pre-warm case)
     useEffect(() => {
-        if (hasCheckedSessionRef.current) return;
-        hasCheckedSessionRef.current = true;
+        // Skip if already connected
+        if (status === "connected" && liveViewUrl) {
+            return;
+        }
 
-        let attempts = 0;
-        const maxAttempts = 20; // Try for up to 10 seconds (20 * 500ms)
-        let intervalId: NodeJS.Timeout | null = null;
         let cancelled = false;
+        let attempts = 0;
+        const maxAttempts = 40; // Try for up to 20 seconds (40 * 500ms)
 
-        const pollForSession = async () => {
-            if (cancelled) return false;
-            const hasSession = await checkSession();
-            if (hasSession && !cancelled) {
-                console.log(`[LiveBrowser] Found pre-warmed session after ${attempts} attempts`);
-                updateStatus("connected");
-                return true;
+        const poll = async () => {
+            while (!cancelled && attempts < maxAttempts) {
+                try {
+                    const found = await checkSession();
+                    if (found && !cancelled) {
+                        return;
+                    }
+                } catch (err) {
+                    // Ignore poll errors, just retry
+                }
+                attempts++;
+                if (!cancelled) {
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                }
             }
-            return false;
         };
 
-        // Check immediately, then poll if not found
-        pollForSession().then((found) => {
-            if (found || cancelled) return;
+        poll();
 
-            // If not found, poll every 500ms until session is ready
-            intervalId = setInterval(async () => {
-                attempts++;
-                const found = await pollForSession();
-                if (found || attempts >= maxAttempts) {
-                    if (intervalId) clearInterval(intervalId);
-                    if (!found && !cancelled) {
-                        console.log(`[LiveBrowser] No pre-warmed session found after ${maxAttempts} attempts`);
-                    }
-                }
-            }, 500);
-        });
-
-        // Cleanup on unmount
         return () => {
             cancelled = true;
-            if (intervalId) clearInterval(intervalId);
         };
-    }, [checkSession, updateStatus]);
+    }, [status, liveViewUrl, checkSession]);
 
     // Poll for click events when connected
     useEffect(() => {
