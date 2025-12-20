@@ -260,7 +260,7 @@ export default function LiveBrowserViewer({
         try {
             await fetch("/api/browser/session", { method: "DELETE" });
             log("✅ Session stopped");
-            
+
             // Clear browser cache
             if (tabId) {
                 clearCachedSession(tabId);

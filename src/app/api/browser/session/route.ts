@@ -110,12 +110,20 @@ export async function POST(request: NextRequest) {
       cookies: finalCookies,
     }, tabId);
 
+    // Get live URL immediately so client can cache everything from one request
+    let liveUrl: string | null = null;
+    if (sessionManager.hasSession()) {
+      const controller = sessionManager.getController();
+      liveUrl = await controller.getBrowserbaseLiveViewUrl();
+    }
+
     logger.setSessionId(session.id);
     logger.logResponse('create_session', session, Date.now() - start);
 
-    // Return session info - client will cache in sessionStorage
+    // Return session info WITH liveUrl - client caches in sessionStorage
     return NextResponse.json({
       ...session,
+      liveUrl, // Include live URL so client doesn't need separate GET
       cookiesLoaded: !!finalCookies,
       cookieCount: finalCookies?.length || 0,
       cookieSource: finalCookies ? cookieSource : 'none',

@@ -174,9 +174,23 @@ function AgentDemoPageContent() {
                         tabId, // Unique tab ID for session isolation
                     }),
                 })
-                    .then((res) => {
+                    .then(async (res) => {
                         if (res.ok) {
+                            const data = await res.json();
                             console.log(`[pre-warm] Browser session started successfully (tabId: ${tabId})`);
+                            
+                            // Store session in sessionStorage so LiveBrowserViewer can find it
+                            // (serverless instances don't share memory, so we cache in browser)
+                            if (data.browserbaseSessionId && data.liveUrl) {
+                                const cacheKey = `browser_session_${tabId}`;
+                                const cached = {
+                                    browserbaseSessionId: data.browserbaseSessionId,
+                                    debugUrl: data.liveUrl,
+                                    createdAt: Date.now(),
+                                };
+                                sessionStorage.setItem(cacheKey, JSON.stringify(cached));
+                                console.log(`[pre-warm] Session cached in sessionStorage`);
+                            }
                         } else {
                             console.warn("[pre-warm] Browser session failed to start:", res.status);
                         }
