@@ -73,19 +73,19 @@ export default function LiveBrowserViewer({
     const checkSession = useCallback(async (): Promise<boolean> => {
         try {
             // Pass tabId to filter for this tab's session only (prevents collisions)
-            const sessionUrl = tabId 
-                ? `/api/browser/session?tabId=${encodeURIComponent(tabId)}`
-                : "/api/browser/session";
+            const sessionUrl = tabId ? `/api/browser/session?tabId=${encodeURIComponent(tabId)}` : "/api/browser/session";
             const response = await fetch(sessionUrl);
             if (response.ok) {
-                const liveResponse = await fetch("/api/browser/live-url");
+                // Also pass tabId when fetching live URL
+                const liveUrlEndpoint = tabId ? `/api/browser/live-url?tabId=${encodeURIComponent(tabId)}` : "/api/browser/live-url";
+                const liveResponse = await fetch(liveUrlEndpoint);
                 if (liveResponse.ok) {
                     const liveData = await liveResponse.json();
                     if (liveData.liveUrl) {
                         console.log("[LiveBrowser] Session connected with live URL");
                         setLiveViewUrl(liveData.liveUrl);
                         setStatus("connected");
-                        
+
                         // Navigate to default URL if provided
                         if (defaultUrl) {
                             console.log(`[LiveBrowser] Navigating to: ${defaultUrl}`);
