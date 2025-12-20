@@ -24,6 +24,57 @@ interface LiveBrowserViewerProps {
 
 type BrowserStatus = "disconnected" | "connecting" | "connected" | "error";
 
+// Session cache helpers - store in sessionStorage to avoid DB calls
+interface CachedSession {
+    browserbaseSessionId: string;
+    debugUrl: string;
+    createdAt: number;
+}
+
+function getCacheKey(tabId: string): string {
+    return `browser_session_${tabId}`;
+}
+
+function getCachedSession(tabId: string): CachedSession | null {
+    if (typeof window === "undefined") return null;
+    try {
+        const cached = sessionStorage.getItem(getCacheKey(tabId));
+        if (!cached) return null;
+        const session = JSON.parse(cached) as CachedSession;
+        // Cache expires after 25 minutes (session expires at 30 min)
+        if (Date.now() - session.createdAt > 25 * 60 * 1000) {
+            sessionStorage.removeItem(getCacheKey(tabId));
+            return null;
+        }
+        return session;
+    } catch {
+        return null;
+    }
+}
+
+function setCachedSession(tabId: string, browserbaseSessionId: string, debugUrl: string): void {
+    if (typeof window === "undefined") return;
+    try {
+        const session: CachedSession = {
+            browserbaseSessionId,
+            debugUrl,
+            createdAt: Date.now(),
+        };
+        sessionStorage.setItem(getCacheKey(tabId), JSON.stringify(session));
+    } catch {
+        // Ignore storage errors
+    }
+}
+
+function clearCachedSession(tabId: string): void {
+    if (typeof window === "undefined") return;
+    try {
+        sessionStorage.removeItem(getCacheKey(tabId));
+    } catch {
+        // Ignore storage errors
+    }
+}
+
 /**
  * LiveBrowserViewer - Full-screen Browserbase live browser
  *
@@ -72,10 +123,23 @@ export default function LiveBrowserViewer({
 
     const checkSession = useCallback(async (): Promise<boolean> => {
         try {
-            // Pass tabId to filter for this tab's session only (prevents collisions)
+            // First check browser cache (no API call needed!)
+            if (tabId) {
+                const cached = getCachedSession(tabId);
+                if (cached) {
+                    console.log("[LiveBrowser] Using cached session (no DB call)");
+                    setLiveViewUrl(cached.debugUrl);
+                    setStatus("connected");
+                    return true;
+                }
+            }
+
+            // Fallback: check API (will hit DB)
             const sessionUrl = tabId ? `/api/browser/session?tabId=${encodeURIComponent(tabId)}` : "/api/browser/session";
             const response = await fetch(sessionUrl);
             if (response.ok) {
+                const sessionData = await response.json();
+                
                 // Also pass tabId when fetching live URL
                 const liveUrlEndpoint = tabId ? `/api/browser/live-url?tabId=${encodeURIComponent(tabId)}` : "/api/browser/live-url";
                 const liveResponse = await fetch(liveUrlEndpoint);
@@ -85,6 +149,11 @@ export default function LiveBrowserViewer({
                         console.log("[LiveBrowser] Session connected with live URL");
                         setLiveViewUrl(liveData.liveUrl);
                         setStatus("connected");
+
+                        // Cache the session in browser storage
+                        if (tabId && sessionData?.browserbaseSessionId) {
+                            setCachedSession(tabId, sessionData.browserbaseSessionId, liveData.liveUrl);
+                        }
 
                         // Navigate to default URL if provided
                         if (defaultUrl) {
@@ -138,12 +207,19 @@ export default function LiveBrowserViewer({
             const session = await response.json();
             log(`✅ Session started: ${session.id}`);
 
-            const liveResponse = await fetch("/api/browser/live-url");
+            const liveUrlEndpoint = tabId ? `/api/browser/live-url?tabId=${encodeURIComponent(tabId)}` : "/api/browser/live-url";
+            const liveResponse = await fetch(liveUrlEndpoint);
             if (liveResponse.ok) {
                 const liveData = await liveResponse.json();
                 if (liveData.liveUrl) {
                     setLiveViewUrl(liveData.liveUrl);
                     log(`🖥️ Live browser ready!`);
+                    
+                    // Cache session in browser storage (no DB call needed on refresh)
+                    if (tabId && session.browserbaseSessionId) {
+                        setCachedSession(tabId, session.browserbaseSessionId, liveData.liveUrl);
+                        log(`💾 Session cached in browser`);
+                    }
                 } else {
                     throw new Error("Live view not available - Browserbase required");
                 }
@@ -176,8 +252,14 @@ export default function LiveBrowserViewer({
         log("🛑 Stopping browser session...");
 
         try {
-            await fetch("/api/browser/session", { method: "DELETE" });
+            const deleteUrl = tabId ? `/api/browser/session?tabId=${encodeURIComponent(tabId)}` : "/api/browser/session";
+            await fetch(deleteUrl, { method: "DELETE" });
             log("✅ Session stopped");
+            
+            // Clear browser cache
+            if (tabId) {
+                clearCachedSession(tabId);
+            }
         } catch (err) {
             log(`⚠️ Error stopping session: ${err}`);
         } finally {
@@ -185,7 +267,7 @@ export default function LiveBrowserViewer({
             setLiveViewUrl(null);
             updateStatus("disconnected");
         }
-    }, [log, updateStatus]);
+    }, [log, updateStatus, tabId]);
 
     const saveCookiesToDb = useCallback(async () => {
         if (status !== "connected" || !websiteSlug) return;
