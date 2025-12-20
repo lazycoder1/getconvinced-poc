@@ -8,18 +8,26 @@ import { liveUrlRoutes } from './routes/live-url.js';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
+// Only use pino-pretty in development (when NODE_ENV is explicitly 'development')
+// In production or when NODE_ENV is not set, use default JSON logger
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+const loggerConfig: { level: string; transport?: { target: string; options: Record<string, unknown> } } = {
+  level: 'info',
+};
+
+if (isDevelopment) {
+  loggerConfig.transport = {
+    target: 'pino-pretty',
+    options: {
+      translateTime: 'HH:MM:ss Z',
+      ignore: 'pid,hostname',
+    },
+  };
+}
 
 const fastify = Fastify({
-  logger: {
-    level: 'info',
-    transport: {
-      target: 'pino-pretty',
-      options: {
-        translateTime: 'HH:MM:ss Z',
-        ignore: 'pid,hostname',
-      },
-    },
-  },
+  logger: loggerConfig,
 });
 
 // Register CORS
