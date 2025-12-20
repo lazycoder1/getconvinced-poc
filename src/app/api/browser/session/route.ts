@@ -153,6 +153,29 @@ export async function POST(request: NextRequest) {
     if (sessionManager.hasSession()) {
       const controller = sessionManager.getController();
       liveUrl = await controller.getBrowserbaseLiveViewUrl();
+      
+      // Navigate to default URL - get from body or from website config in DB
+      let defaultUrl = body.defaultUrl;
+      if (!defaultUrl && websiteSlug) {
+        try {
+          const website = await prisma.website.findUnique({
+            where: { slug: websiteSlug },
+            include: { config: true },
+          });
+          defaultUrl = website?.config?.default_url || website?.config?.base_url;
+        } catch {
+          // Ignore, will use fallback
+        }
+      }
+      
+      if (defaultUrl) {
+        try {
+          console.log(`[session] Navigating to default URL: ${defaultUrl}`);
+          await controller.navigate(defaultUrl);
+        } catch (navError) {
+          console.error('[session] Failed to navigate to default URL:', navError);
+        }
+      }
     }
 
     // Store in PostgreSQL for cross-instance access

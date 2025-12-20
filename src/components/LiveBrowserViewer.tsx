@@ -262,7 +262,7 @@ export default function LiveBrowserViewer({
             const deleteUrl = tabId ? `/api/browser/session?tabId=${encodeURIComponent(tabId)}` : "/api/browser/session";
             await fetch(deleteUrl, { method: "DELETE" });
             log("✅ Session stopped");
-            
+
             // Clear browser cache
             if (tabId) {
                 clearCachedSession(tabId);
