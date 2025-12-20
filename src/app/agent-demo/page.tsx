@@ -161,42 +161,9 @@ function AgentDemoPageContent() {
                 setLoadingProgress(0);
                 setLoadingStage("Connecting to server...");
 
-                // Simulate progress updates
-                progressInterval = setInterval(() => {
-                    setLoadingProgress((prev) => {
-                        // Slow down as we approach 90% (wait for actual completion)
-                        if (prev < 20) return prev + 2;
-                        if (prev < 50) return prev + 1.5;
-                        if (prev < 80) return prev + 0.8;
-                        if (prev < 90) return prev + 0.3;
-                        return prev; // Hold at 90% until actual completion
-                    });
-                }, 100);
-
-                setLoadingStage("Fetching agent configuration...");
-                setLoadingProgress(20);
-
-                // Fetch agent configuration
-                const agentConfigResponse = await fetch(`/api/agent/config/${websiteSlug}`);
-                if (!agentConfigResponse.ok) {
-                    throw new Error(`Failed to fetch agent config: ${agentConfigResponse.statusText}`);
-                }
-
-                setLoadingProgress(60);
-                setLoadingStage("Loading screenshots and routes...");
-
-                const agentConfigData = await agentConfigResponse.json();
-
-                setLoadingProgress(80);
-                setLoadingStage("Warming up browser session...");
-
-                // Do not expose system prompts on the client
-                delete agentConfigData.system_prompt;
-                setAgentConfig(agentConfigData);
-
-                // Pre-warm browser session in background (don't await - let it run async)
-                // This starts the Browserbase session early so it's ready when agent needs it
-                // Pass tabId for session isolation - ensures this tab gets its own session
+                // Start browser pre-warm IMMEDIATELY in parallel (don't await)
+                // This runs alongside config fetch, saving several seconds
+                console.log(`[pre-warm] Starting browser session early (tabId: ${tabId})`);
                 fetch("/api/browser/session", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -217,6 +184,39 @@ function AgentDemoPageContent() {
                     .catch((err) => {
                         console.warn("[pre-warm] Browser session error:", err);
                     });
+
+                // Simulate progress updates
+                progressInterval = setInterval(() => {
+                    setLoadingProgress((prev) => {
+                        // Slow down as we approach 90% (wait for actual completion)
+                        if (prev < 20) return prev + 2;
+                        if (prev < 50) return prev + 1.5;
+                        if (prev < 80) return prev + 0.8;
+                        if (prev < 90) return prev + 0.3;
+                        return prev; // Hold at 90% until actual completion
+                    });
+                }, 100);
+
+                setLoadingStage("Fetching agent configuration...");
+                setLoadingProgress(20);
+
+                // Fetch agent configuration (browser pre-warm running in parallel!)
+                const agentConfigResponse = await fetch(`/api/agent/config/${websiteSlug}`);
+                if (!agentConfigResponse.ok) {
+                    throw new Error(`Failed to fetch agent config: ${agentConfigResponse.statusText}`);
+                }
+
+                setLoadingProgress(60);
+                setLoadingStage("Loading screenshots and routes...");
+
+                const agentConfigData = await agentConfigResponse.json();
+
+                setLoadingProgress(80);
+                setLoadingStage("Preparing agent...");
+
+                // Do not expose system prompts on the client
+                delete agentConfigData.system_prompt;
+                setAgentConfig(agentConfigData);
 
                 // Complete loading
                 if (progressInterval) {

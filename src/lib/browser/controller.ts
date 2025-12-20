@@ -110,9 +110,9 @@ export class BrowserController {
             if (s.projectId !== config.projectId || s.status !== 'RUNNING') {
               return false;
             }
-            // Must match our tabId in metadata
-            const metadata = s.metadata || {};
-            return metadata.tabId === this.tabId;
+            // Must match our tabId in userMetadata
+            const userMetadata = s.userMetadata || {};
+            return userMetadata.tabId === this.tabId;
           })
         : [];
 
@@ -161,9 +161,9 @@ export class BrowserController {
     if (config.region) {
       body.region = config.region;
     }
-    // Add tabId to metadata for session isolation
+    // Add tabId to userMetadata for session isolation
     if (this.tabId) {
-      body.metadata = {
+      body.userMetadata = {
         tabId: this.tabId,
         createdAt: new Date().toISOString(),
       };

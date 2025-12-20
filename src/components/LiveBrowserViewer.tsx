@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Globe, AlertCircle, Play, Square, Loader2, Save, X, Settings } from "lucide-react";
+import { AlertCircle, Play, Square, Loader2, Save, X, Settings } from "lucide-react";
 import { HUBSPOT_CONFIG } from "@/lib/browser/hubspot-config";
 import type { ClickEvent } from "@/lib/browser";
 
@@ -200,15 +200,49 @@ export default function LiveBrowserViewer({
         }
     }, [status, websiteSlug, log]);
 
+    // Poll for session until it's ready (handles pre-warm case)
     useEffect(() => {
         if (hasCheckedSessionRef.current) return;
         hasCheckedSessionRef.current = true;
 
-        checkSession().then((hasSession) => {
-            if (hasSession) {
+        let attempts = 0;
+        const maxAttempts = 20; // Try for up to 10 seconds (20 * 500ms)
+        let intervalId: NodeJS.Timeout | null = null;
+        let cancelled = false;
+
+        const pollForSession = async () => {
+            if (cancelled) return false;
+            const hasSession = await checkSession();
+            if (hasSession && !cancelled) {
+                console.log(`[LiveBrowser] Found pre-warmed session after ${attempts} attempts`);
                 updateStatus("connected");
+                return true;
             }
+            return false;
+        };
+
+        // Check immediately, then poll if not found
+        pollForSession().then((found) => {
+            if (found || cancelled) return;
+
+            // If not found, poll every 500ms until session is ready
+            intervalId = setInterval(async () => {
+                attempts++;
+                const found = await pollForSession();
+                if (found || attempts >= maxAttempts) {
+                    if (intervalId) clearInterval(intervalId);
+                    if (!found && !cancelled) {
+                        console.log(`[LiveBrowser] No pre-warmed session found after ${maxAttempts} attempts`);
+                    }
+                }
+            }, 500);
         });
+
+        // Cleanup on unmount
+        return () => {
+            cancelled = true;
+            if (intervalId) clearInterval(intervalId);
+        };
     }, [checkSession, updateStatus]);
 
     // Poll for click events when connected
@@ -396,57 +430,13 @@ export default function LiveBrowserViewer({
         );
     }
 
-    // Disconnected state - Start overlay
+    // Waiting for pre-warmed session - Simple loading state
     return (
-        <div className="relative w-full h-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
-            {/* Background decoration */}
-            <div className="absolute inset-0 opacity-10">
-                <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500 rounded-full blur-3xl" />
-                <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500 rounded-full blur-3xl" />
-            </div>
-
-            {/* Content */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-                <Globe className="w-20 h-20 text-gray-600 mb-8" />
-
-                <h2 className="text-3xl font-bold text-white mb-3">Live Browser</h2>
-                <p className="text-gray-400 text-center max-w-md mb-8">
-                    Launch an interactive browser session to log in and capture authentication cookies.
-                </p>
-
-                {/* Instructions */}
-                <div className="flex items-center gap-6 mb-10 text-sm">
-                    <div className="flex items-center gap-2 text-gray-400">
-                        <span className="flex items-center justify-center w-6 h-6 bg-gray-700 rounded-full text-xs font-bold">1</span>
-                        Start Browser
-                    </div>
-                    <div className="w-8 h-px bg-gray-700" />
-                    <div className="flex items-center gap-2 text-gray-400">
-                        <span className="flex items-center justify-center w-6 h-6 bg-gray-700 rounded-full text-xs font-bold">2</span>
-                        Log In
-                    </div>
-                    <div className="w-8 h-px bg-gray-700" />
-                    <div className="flex items-center gap-2 text-gray-400">
-                        <span className="flex items-center justify-center w-6 h-6 bg-gray-700 rounded-full text-xs font-bold">3</span>
-                        Save Cookies
-                    </div>
-                </div>
-
-                {/* Start Button */}
-                <button
-                    onClick={startSession}
-                    disabled={isLoading}
-                    className="flex items-center gap-3 px-8 py-4 text-lg font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl hover:from-blue-700 hover:to-blue-600 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-50"
-                >
-                    {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Play className="w-6 h-6" />}
-                    Start Browser
-                </button>
-
-                {defaultUrl && (
-                    <p className="mt-4 text-sm text-gray-500">
-                        Will navigate to: <span className="text-gray-400">{defaultUrl}</span>
-                    </p>
-                )}
+        <div className="relative w-full h-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <Loader2 className="w-16 h-16 text-blue-500 animate-spin mb-6" />
+                <h2 className="text-2xl font-semibold text-white mb-2">Starting Browser</h2>
+                <p className="text-gray-400">Connecting to Browserbase...</p>
             </div>
         </div>
     );
