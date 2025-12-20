@@ -156,24 +156,39 @@ export async function GET(request: NextRequest) {
           const data = await response.json();
           const sessions = data.sessions || data || [];
           
-          // Find a running session in our project that matches the tabId
-          const runningSession = Array.isArray(sessions)
-            ? sessions.find((s: any) => {
-                // Must be in our project and running
-                if (s.projectId !== projectId || s.status !== 'RUNNING') {
-                  return false;
-                }
-                // If tabId is provided, must match the session's userMetadata.tabId
-                if (tabId) {
-                  const metadata = s.userMetadata || {};
-                  return metadata.tabId === tabId;
-                }
-                // If no tabId filter, return first matching session (backward compat)
-                return true;
-              })
-            : null;
+          // Filter sessions in our project
+          const projectSessions = Array.isArray(sessions)
+            ? sessions.filter((s: any) => s.projectId === projectId && s.status === 'RUNNING')
+            : [];
           
-          if (runningSession) {
+          // If tabId is provided, we need to fetch each session's details to check userMetadata
+          // (LIST endpoint may not return userMetadata)
+          if (tabId && projectSessions.length > 0) {
+            for (const session of projectSessions) {
+              try {
+                // Fetch individual session to get userMetadata
+                const detailResponse = await fetch(
+                  `https://www.browserbase.com/v1/sessions/${session.id}`,
+                  { headers: { 'x-bb-api-key': apiKey } }
+                );
+                if (detailResponse.ok) {
+                  const sessionDetail = await detailResponse.json();
+                  const metadata = sessionDetail.userMetadata || {};
+                  if (metadata.tabId === tabId) {
+                    return NextResponse.json({
+                      id: sessionDetail.id,
+                      createdAt: new Date(sessionDetail.createdAt),
+                      browserbaseSessionId: sessionDetail.id,
+                    });
+                  }
+                }
+              } catch (detailError) {
+                console.error(`Error fetching session ${session.id} details:`, detailError);
+              }
+            }
+          } else if (projectSessions.length > 0) {
+            // No tabId filter, return first matching session
+            const runningSession = projectSessions[0];
             return NextResponse.json({
               id: runningSession.id,
               createdAt: new Date(runningSession.createdAt),

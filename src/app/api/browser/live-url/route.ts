@@ -45,24 +45,42 @@ export async function GET(request: NextRequest) {
           const data = await sessionsResponse.json();
           const sessions = data.sessions || data || [];
           
-          // Find a running session in our project that matches the tabId
-          const runningSession = Array.isArray(sessions)
-            ? sessions.find((s: any) => {
-                if (s.projectId !== projectId || s.status !== 'RUNNING') {
-                  return false;
-                }
-                if (tabId) {
-                  const metadata = s.userMetadata || {};
-                  return metadata.tabId === tabId;
-                }
-                return true;
-              })
-            : null;
+          // Filter sessions in our project
+          const projectSessions = Array.isArray(sessions)
+            ? sessions.filter((s: any) => s.projectId === projectId && s.status === 'RUNNING')
+            : [];
           
-          if (runningSession) {
+          let matchingSessionId: string | null = null;
+          
+          // If tabId is provided, fetch each session's details to check userMetadata
+          if (tabId && projectSessions.length > 0) {
+            for (const session of projectSessions) {
+              try {
+                const detailResponse = await fetch(
+                  `https://www.browserbase.com/v1/sessions/${session.id}`,
+                  { headers: { 'x-bb-api-key': apiKey } }
+                );
+                if (detailResponse.ok) {
+                  const sessionDetail = await detailResponse.json();
+                  const metadata = sessionDetail.userMetadata || {};
+                  if (metadata.tabId === tabId) {
+                    matchingSessionId = session.id;
+                    break;
+                  }
+                }
+              } catch (detailError) {
+                console.error(`Error fetching session ${session.id} details:`, detailError);
+              }
+            }
+          } else if (projectSessions.length > 0) {
+            // No tabId filter, use first matching session
+            matchingSessionId = projectSessions[0].id;
+          }
+          
+          if (matchingSessionId) {
             // Get the debug URL for this session
             const debugResponse = await fetch(
-              `https://www.browserbase.com/v1/sessions/${runningSession.id}/debug`,
+              `https://www.browserbase.com/v1/sessions/${matchingSessionId}/debug`,
               { headers: { 'x-bb-api-key': apiKey } }
             );
             
