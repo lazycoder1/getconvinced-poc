@@ -55,6 +55,25 @@ async function loadCookiesFromDb(websiteSlug: string): Promise<Record<string, un
 }
 
 /**
+ * Helper to fetch and cache the debug URL from Browserbase
+ */
+async function fetchDebugUrl(browserbaseSessionId: string, apiKey: string): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://www.browserbase.com/v1/sessions/${browserbaseSessionId}/debug`,
+      { headers: { 'x-bb-api-key': apiKey } }
+    );
+    if (response.ok) {
+      const data = await response.json();
+      return data.debuggerFullscreenUrl || null;
+    }
+  } catch (error) {
+    console.error('Error fetching debug URL:', error);
+  }
+  return null;
+}
+
+/**
  * POST /api/browser/session - Create a new browser session
  *
  * Body options:
@@ -76,6 +95,27 @@ export async function POST(request: NextRequest) {
       loadFromDb = false,
       tabId, // Unique tab ID for session isolation
     } = body;
+
+    if (!tabId) {
+      return NextResponse.json({ error: 'tabId is required' }, { status: 400 });
+    }
+
+    // Check if session already exists for this tabId
+    const existingSession = await prisma.browserSession.findUnique({
+      where: { tab_id: tabId },
+    });
+
+    if (existingSession && existingSession.status === 'running') {
+      // Return existing session
+      return NextResponse.json({
+        id: existingSession.id,
+        createdAt: existingSession.created_at,
+        browserbaseSessionId: existingSession.browserbase_session_id,
+        cookiesLoaded: true,
+        cookieCount: 0,
+        cookieSource: 'existing',
+      }, { status: 200 });
+    }
 
     // Determine which cookies to use (priority: direct cookies > DB > file)
     let finalCookies = cookies;
@@ -107,6 +147,32 @@ export async function POST(request: NextRequest) {
       cookies: finalCookies,
     }, tabId);
 
+    // Fetch debug URL and store in database
+    const apiKey = process.env.BROWSERBASE_API_KEY;
+    let debugUrl: string | null = null;
+    if (apiKey && session.browserbaseSessionId) {
+      debugUrl = await fetchDebugUrl(session.browserbaseSessionId, apiKey);
+    }
+
+    // Store session in database (upsert in case of race condition)
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 min expiry
+    await prisma.browserSession.upsert({
+      where: { tab_id: tabId },
+      create: {
+        tab_id: tabId,
+        browserbase_session_id: session.browserbaseSessionId || session.id,
+        debug_url: debugUrl,
+        status: 'running',
+        expires_at: expiresAt,
+      },
+      update: {
+        browserbase_session_id: session.browserbaseSessionId || session.id,
+        debug_url: debugUrl,
+        status: 'running',
+        expires_at: expiresAt,
+      },
+    });
+
     logger.setSessionId(session.id);
     logger.logResponse('create_session', session, Date.now() - start);
 
@@ -125,80 +191,31 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/browser/session - Get current session info
- * Checks in-memory state first, then falls back to checking Browserbase API
- * (needed for serverless environments where memory doesn't persist)
+ * Checks database for session by tabId (works in serverless)
  * 
  * Query params:
- * - tabId: string - Filter by tab ID to get only this tab's session (prevents collisions)
+ * - tabId: string - Filter by tab ID to get this tab's session (required)
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const tabId = searchParams.get('tabId');
 
-    // First check in-memory state
-    const info = sessionManager.getSessionInfo();
-    if (info) {
-      return NextResponse.json(info);
+    if (!tabId) {
+      return NextResponse.json({ error: 'tabId is required' }, { status: 400 });
     }
 
-    // In serverless, memory doesn't persist - check Browserbase API for running sessions
-    const apiKey = process.env.BROWSERBASE_API_KEY;
-    const projectId = process.env.BROWSERBASE_PROJECT_ID;
-    
-    if (apiKey && projectId) {
-      try {
-        const response = await fetch('https://www.browserbase.com/v1/sessions?status=RUNNING', {
-          headers: { 'x-bb-api-key': apiKey },
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          const sessions = data.sessions || data || [];
-          
-          // Filter sessions in our project
-          const projectSessions = Array.isArray(sessions)
-            ? sessions.filter((s: any) => s.projectId === projectId && s.status === 'RUNNING')
-            : [];
-          
-          // If tabId is provided, we need to fetch each session's details to check userMetadata
-          // (LIST endpoint may not return userMetadata)
-          if (tabId && projectSessions.length > 0) {
-            for (const session of projectSessions) {
-              try {
-                // Fetch individual session to get userMetadata
-                const detailResponse = await fetch(
-                  `https://www.browserbase.com/v1/sessions/${session.id}`,
-                  { headers: { 'x-bb-api-key': apiKey } }
-                );
-                if (detailResponse.ok) {
-                  const sessionDetail = await detailResponse.json();
-                  const metadata = sessionDetail.userMetadata || {};
-                  if (metadata.tabId === tabId) {
-                    return NextResponse.json({
-                      id: sessionDetail.id,
-                      createdAt: new Date(sessionDetail.createdAt),
-                      browserbaseSessionId: sessionDetail.id,
-                    });
-                  }
-                }
-              } catch (detailError) {
-                console.error(`Error fetching session ${session.id} details:`, detailError);
-              }
-            }
-          } else if (projectSessions.length > 0) {
-            // No tabId filter, return first matching session
-            const runningSession = projectSessions[0];
-            return NextResponse.json({
-              id: runningSession.id,
-              createdAt: new Date(runningSession.createdAt),
-              browserbaseSessionId: runningSession.id,
-            });
-          }
-        }
-      } catch (bbError) {
-        console.error('Error checking Browserbase for sessions:', bbError);
-      }
+    // Check database for session
+    const dbSession = await prisma.browserSession.findUnique({
+      where: { tab_id: tabId },
+    });
+
+    if (dbSession && dbSession.status === 'running') {
+      return NextResponse.json({
+        id: dbSession.id,
+        createdAt: dbSession.created_at,
+        browserbaseSessionId: dbSession.browserbase_session_id,
+      });
     }
 
     return NextResponse.json(
@@ -213,23 +230,31 @@ export async function GET(request: NextRequest) {
 
 /**
  * DELETE /api/browser/session - Close the current session
+ * 
+ * Query params:
+ * - tabId: string - The tab ID of the session to close
  */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
-    if (!sessionManager.hasSession()) {
-      return NextResponse.json(
-        { error: 'No active session' },
-        { status: 404 }
-      );
+    const { searchParams } = new URL(request.url);
+    const tabId = searchParams.get('tabId');
+
+    // Try to close in-memory session
+    if (sessionManager.hasSession()) {
+      logger.logAction('close_session', { tabId });
+      const start = Date.now();
+      await sessionManager.closeSession();
+      logger.logResponse('close_session', { success: true }, Date.now() - start);
+      logger.clearSessionId();
     }
 
-    logger.logAction('close_session', {});
-    const start = Date.now();
-
-    await sessionManager.closeSession();
-
-    logger.logResponse('close_session', { success: true }, Date.now() - start);
-    logger.clearSessionId();
+    // Mark as closed in database
+    if (tabId) {
+      await prisma.browserSession.updateMany({
+        where: { tab_id: tabId },
+        data: { status: 'closed' },
+      });
+    }
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {

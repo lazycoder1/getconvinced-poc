@@ -1,21 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGlobalSessionManager } from '@/lib/browser';
+import { prisma } from '@/lib/database';
 
 const sessionManager = getGlobalSessionManager();
+
+/**
+ * Helper to fetch debug URL from Browserbase
+ */
+async function fetchDebugUrl(browserbaseSessionId: string, apiKey: string): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://www.browserbase.com/v1/sessions/${browserbaseSessionId}/debug`,
+      { headers: { 'x-bb-api-key': apiKey } }
+    );
+    if (response.ok) {
+      const data = await response.json();
+      return data.debuggerFullscreenUrl || null;
+    }
+  } catch (error) {
+    console.error('Error fetching debug URL:', error);
+  }
+  return null;
+}
 
 /**
  * GET /api/browser/live-url - Get Browserbase live view URL
  * 
  * Returns the debugger fullscreen URL for an interactive browser session.
- * Works in serverless by falling back to Browserbase API.
+ * Uses database for serverless-compatible session tracking.
  * 
  * Query params:
- * - tabId: string - Filter by tab ID to get only this tab's session
+ * - tabId: string - Filter by tab ID to get only this tab's session (required)
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const tabId = searchParams.get('tabId');
+
+    if (!tabId) {
+      return NextResponse.json({ error: 'tabId is required' }, { status: 400 });
+    }
 
     // First try in-memory state
     if (sessionManager.hasSession()) {
@@ -30,73 +54,36 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // In serverless, memory doesn't persist - check Browserbase API
-    const apiKey = process.env.BROWSERBASE_API_KEY;
-    const projectId = process.env.BROWSERBASE_PROJECT_ID;
-    
-    if (apiKey && projectId) {
-      try {
-        // Find a running session
-        const sessionsResponse = await fetch('https://www.browserbase.com/v1/sessions?status=RUNNING', {
-          headers: { 'x-bb-api-key': apiKey },
+    // Check database for session
+    const dbSession = await prisma.browserSession.findUnique({
+      where: { tab_id: tabId },
+    });
+
+    if (dbSession && dbSession.status === 'running') {
+      // If we have a cached debug URL, use it
+      if (dbSession.debug_url) {
+        return NextResponse.json({
+          liveUrl: dbSession.debug_url,
+          usingBrowserbase: true,
         });
-        
-        if (sessionsResponse.ok) {
-          const data = await sessionsResponse.json();
-          const sessions = data.sessions || data || [];
-          
-          // Filter sessions in our project
-          const projectSessions = Array.isArray(sessions)
-            ? sessions.filter((s: any) => s.projectId === projectId && s.status === 'RUNNING')
-            : [];
-          
-          let matchingSessionId: string | null = null;
-          
-          // If tabId is provided, fetch each session's details to check userMetadata
-          if (tabId && projectSessions.length > 0) {
-            for (const session of projectSessions) {
-              try {
-                const detailResponse = await fetch(
-                  `https://www.browserbase.com/v1/sessions/${session.id}`,
-                  { headers: { 'x-bb-api-key': apiKey } }
-                );
-                if (detailResponse.ok) {
-                  const sessionDetail = await detailResponse.json();
-                  const metadata = sessionDetail.userMetadata || {};
-                  if (metadata.tabId === tabId) {
-                    matchingSessionId = session.id;
-                    break;
-                  }
-                }
-              } catch (detailError) {
-                console.error(`Error fetching session ${session.id} details:`, detailError);
-              }
-            }
-          } else if (projectSessions.length > 0) {
-            // No tabId filter, use first matching session
-            matchingSessionId = projectSessions[0].id;
-          }
-          
-          if (matchingSessionId) {
-            // Get the debug URL for this session
-            const debugResponse = await fetch(
-              `https://www.browserbase.com/v1/sessions/${matchingSessionId}/debug`,
-              { headers: { 'x-bb-api-key': apiKey } }
-            );
-            
-            if (debugResponse.ok) {
-              const debugData = await debugResponse.json();
-              if (debugData.debuggerFullscreenUrl) {
-                return NextResponse.json({
-                  liveUrl: debugData.debuggerFullscreenUrl,
-                  usingBrowserbase: true,
-                });
-              }
-            }
-          }
+      }
+
+      // Otherwise, fetch from Browserbase and cache it
+      const apiKey = process.env.BROWSERBASE_API_KEY;
+      if (apiKey) {
+        const debugUrl = await fetchDebugUrl(dbSession.browserbase_session_id, apiKey);
+        if (debugUrl) {
+          // Cache the debug URL in database
+          await prisma.browserSession.update({
+            where: { tab_id: tabId },
+            data: { debug_url: debugUrl },
+          });
+
+          return NextResponse.json({
+            liveUrl: debugUrl,
+            usingBrowserbase: true,
+          });
         }
-      } catch (bbError) {
-        console.error('Error getting live URL from Browserbase:', bbError);
       }
     }
 
@@ -112,4 +99,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
