@@ -21,12 +21,12 @@ const getApiBase = () => {
 async function browserApiCall(endpoint: string, body?: Record<string, unknown>) {
     // Include session info in all API calls for reliable serverless reconnection
     const cached = getCachedSessionInfo();
-    const enrichedBody = body ? { 
-        ...body, 
+    const enrichedBody = body ? {
+        ...body,
         tabId: cached.tabId,
         browserbaseSessionId: cached.browserbaseSessionId,
     } : undefined;
-    
+
     const url = `${getApiBase()}/api/browser/${endpoint}`;
 
     try {
@@ -74,9 +74,9 @@ function getCachedSessionInfo(): { tabId?: string; browserbaseSessionId?: string
     try {
         const tabId = sessionStorage.getItem('browserTabId');
         const browserbaseSessionId = sessionStorage.getItem('browserbaseSessionId');
-        return { 
-            tabId: tabId || undefined, 
-            browserbaseSessionId: browserbaseSessionId || undefined 
+        return {
+            tabId: tabId || undefined,
+            browserbaseSessionId: browserbaseSessionId || undefined
         };
     } catch {
         return {};
@@ -89,7 +89,7 @@ async function getSessionInfo(): Promise<{ success: boolean; hasSession: boolean
     const params = new URLSearchParams();
     if (cached.tabId) params.set('tabId', cached.tabId);
     if (cached.browserbaseSessionId) params.set('sessionId', cached.browserbaseSessionId);
-    
+
     const url = `${getApiBase()}/api/browser/session${params.toString() ? '?' + params.toString() : ''}`;
     try {
         const res = await fetch(url);

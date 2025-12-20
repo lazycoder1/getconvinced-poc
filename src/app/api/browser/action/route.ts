@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGlobalSessionManager, BrowserActionSchema, getBrowserLogger } from '@/lib/browser';
+import { prisma } from '@/lib/database';
 
 const sessionManager = getGlobalSessionManager();
 const logger = getBrowserLogger();
 
 /**
- * Try to reconnect to an existing Browserbase session
- * Used when action endpoint hits a different serverless instance
- * 
- * Priority:
- * 1. Use provided sessionId (most reliable)
- * 2. Fall back to searching for running sessions
+ * Ensure we have an active session, reconnecting if needed
  */
-async function ensureSession(browserbaseSessionId?: string): Promise<boolean> {
-  // Already have session in memory
+async function ensureSession(browserbaseSessionId?: string, tabId?: string): Promise<boolean> {
+  // 1. Already have session in memory
   if (sessionManager.hasSession()) {
     return true;
   }
@@ -22,34 +18,31 @@ async function ensureSession(browserbaseSessionId?: string): Promise<boolean> {
   const projectId = process.env.BROWSERBASE_PROJECT_ID;
   if (!apiKey || !projectId) return false;
 
-  // If we have a specific session ID, try to reconnect to it directly
+  // 2. Try provided sessionId first (most reliable)
   if (browserbaseSessionId) {
-    console.log(`[action] Reconnecting to specific session: ${browserbaseSessionId}`);
-    const { BrowserController } = await import('@/lib/browser/controller');
-    const controller = new BrowserController({
-      useBrowserbase: true,
-      browserbaseConfig: { apiKey, projectId },
-    });
+    console.log(`[action] Reconnecting to provided sessionId: ${browserbaseSessionId}`);
+    const success = await reconnect(browserbaseSessionId, apiKey, projectId);
+    if (success) return true;
+  }
 
+  // 3. Try tabId lookup in PostgreSQL
+  if (tabId) {
+    console.log(`[action] Looking up tabId in PostgreSQL: ${tabId}`);
     try {
-      const reconnected = await controller.reconnectToBrowserbaseSession(browserbaseSessionId);
-      if (reconnected) {
-        // @ts-ignore - store in session manager
-        sessionManager['session'] = {
-          id: browserbaseSessionId,
-          controller,
-          createdAt: new Date(),
-          browserbaseSessionId: browserbaseSessionId,
-        };
-        console.log(`[action] Successfully reconnected to ${browserbaseSessionId}`);
-        return true;
+      const dbSession = await prisma.browserSession.findUnique({
+        where: { tab_id: tabId },
+      });
+      if (dbSession && dbSession.status === 'running') {
+        const success = await reconnect(dbSession.browserbase_session_id, apiKey, projectId);
+        if (success) return true;
       }
-    } catch (error) {
-      console.error(`[action] Failed to reconnect to ${browserbaseSessionId}:`, error);
+    } catch (e) {
+      console.error('[action] DB lookup failed:', e);
     }
   }
 
-  // Fallback: search for any running session in our project
+  // 4. Fallback: search Browserbase for any running session
+  console.log(`[action] Searching Browserbase for running sessions`);
   try {
     const response = await fetch('https://www.browserbase.com/v1/sessions?status=RUNNING', {
       headers: { 'x-bb-api-key': apiKey },
@@ -63,64 +56,79 @@ async function ensureSession(browserbaseSessionId?: string): Promise<boolean> {
         : null;
 
       if (runningSession) {
-        console.log(`[action] Reconnecting to found session: ${runningSession.id}`);
-        const { BrowserController } = await import('@/lib/browser/controller');
-        const controller = new BrowserController({
-          useBrowserbase: true,
-          browserbaseConfig: { apiKey, projectId },
-        });
-
-        const reconnected = await controller.reconnectToBrowserbaseSession(runningSession.id);
-        if (reconnected) {
-          // @ts-ignore - store in session manager
-          sessionManager['session'] = {
-            id: runningSession.id,
-            controller,
-            createdAt: new Date(),
-            browserbaseSessionId: runningSession.id,
-          };
-          console.log(`[action] Successfully reconnected`);
-          return true;
-        }
+        console.log(`[action] Found running session: ${runningSession.id}`);
+        const success = await reconnect(runningSession.id, apiKey, projectId);
+        if (success) return true;
       }
     }
   } catch (error) {
-    console.error('[action] Failed to find/reconnect:', error);
+    console.error('[action] Browserbase search failed:', error);
+  }
+
+  return false;
+}
+
+/**
+ * Reconnect to a specific Browserbase session
+ */
+async function reconnect(sessionId: string, apiKey: string, projectId: string): Promise<boolean> {
+  try {
+    // Verify session is still running
+    const checkResponse = await fetch(`https://www.browserbase.com/v1/sessions/${sessionId}`, {
+      headers: { 'x-bb-api-key': apiKey },
+    });
+
+    if (!checkResponse.ok) {
+      console.log(`[action] Session ${sessionId} not found`);
+      return false;
+    }
+
+    const sessionData = await checkResponse.json();
+    if (sessionData.status !== 'RUNNING') {
+      console.log(`[action] Session ${sessionId} not running (${sessionData.status})`);
+      return false;
+    }
+
+    // Reconnect
+    const { BrowserController } = await import('@/lib/browser/controller');
+    const controller = new BrowserController({
+      useBrowserbase: true,
+      browserbaseConfig: { apiKey, projectId },
+    });
+
+    const reconnected = await controller.reconnectToBrowserbaseSession(sessionId);
+    if (reconnected) {
+      // @ts-ignore
+      sessionManager['session'] = {
+        id: sessionId,
+        controller,
+        createdAt: new Date(),
+        browserbaseSessionId: sessionId,
+      };
+      console.log(`[action] ✓ Reconnected to ${sessionId}`);
+      return true;
+    }
+  } catch (error) {
+    console.error(`[action] Reconnect error:`, error);
   }
   return false;
 }
 
 /**
  * POST /api/browser/action - Execute a browser action
- * 
- * Supported actions:
- * - navigate: { type: 'navigate', url: string }
- * - click: { type: 'click', x: number, y: number }
- * - click_element: { type: 'click_element', selector: string }
- * - type: { type: 'type', text: string }
- * - type_element: { type: 'type_element', selector: string, text: string }
- * - key: { type: 'key', key: string }
- * - scroll: { type: 'scroll', direction: 'up'|'down'|'left'|'right', amount?: number }
- * - scroll_to: { type: 'scroll_to', selector: string }
- * - back: { type: 'back' }
- * - forward: { type: 'forward' }
- * - refresh: { type: 'refresh' }
- * - get_state: { type: 'get_state' }
- * - get_state_compact: { type: 'get_state_compact' }
- * - screenshot: { type: 'screenshot' }
- * - hover: { type: 'hover', x: number, y: number }
- * - hover_element: { type: 'hover_element', selector: string }
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    // Extract session info before parsing action (tools pass this for reliable reconnection)
+    // Extract session hints from body (tools pass these)
     const browserbaseSessionId = body.browserbaseSessionId as string | undefined;
+    const tabId = body.tabId as string | undefined;
     
-    // Ensure we have a session (reconnect if needed for serverless)
-    const hasSession = await ensureSession(browserbaseSessionId);
+    // Ensure we have a session
+    const hasSession = await ensureSession(browserbaseSessionId, tabId);
     if (!hasSession) {
+      console.log(`[action] No session available`);
       return NextResponse.json(
         { error: 'No active session. Create one first via POST /api/browser/session' },
         { status: 404 }
@@ -128,7 +136,6 @@ export async function POST(request: NextRequest) {
     }
 
     const parsed = BrowserActionSchema.safeParse(body);
-
     if (!parsed.success) {
       return NextResponse.json(
         { error: `Invalid action: ${parsed.error.message}` },
@@ -255,6 +262,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[action] Error:', error);
     logger.logError('action', error);
     return NextResponse.json(
       { success: false, error: message },
@@ -262,4 +270,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
