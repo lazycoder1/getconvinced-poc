@@ -4,7 +4,7 @@ import {
   extractPageStateLite,
   extractPageStateCompact,
   DEFAULT_STATE_OPTIONS
-} from './dom-extractor';
+} from './dom-extractor.js';
 import type {
   Cookie,
   BrowserControllerOptions,
@@ -12,7 +12,7 @@ import type {
   PageStateLite,
   PageStateCompact,
   PageStateOptions
-} from './types';
+} from './types.js';
 
 /**
  * BrowserController - Core browser automation class
@@ -39,8 +39,8 @@ export class BrowserController {
   private page: Page | null = null;
   private browserbaseSessionId: string | null = null;
   private clickEvents: ClickEvent[] = [];
-  private maxClickEvents = 50; // Keep last 50 clicks
-  private tabId: string | null = null; // Unique identifier for this tab/session
+  private maxClickEvents = 50;
+  private tabId: string | null = null;
   private options: BrowserControllerOptions & {
     headless: boolean;
     viewport: { width: number; height: number }
@@ -58,7 +58,6 @@ export class BrowserController {
 
   /**
    * Set the unique tab ID for session isolation
-   * This ensures we only reuse sessions belonging to this specific tab
    */
   setTabId(tabId: string): void {
     this.tabId = tabId;
@@ -74,14 +73,11 @@ export class BrowserController {
 
   /**
    * Find an existing running Browserbase session to reuse
-   * Only returns sessions that match our unique tabId to prevent session stealing
-   * Returns the session info (id and connectUrl) if found, null otherwise
    */
   private async findExistingBrowserbaseSession(): Promise<{ id: string; connectUrl: string } | null> {
     const config = this.options.browserbaseConfig;
     if (!config) return null;
 
-    // Without a tabId, we can't safely identify our own session
     if (!this.tabId) {
       console.log('[browserbase] No tabId set - cannot reuse sessions safely');
       return null;
@@ -103,23 +99,19 @@ export class BrowserController {
       const data = await response.json();
       const sessions = data.sessions || data || [];
 
-      // Find a session in our project that matches our tabId
       const matchingSessions = Array.isArray(sessions)
-        ? sessions.filter((s: any) => {
-          // Must be in our project and running
+        ? sessions.filter((s: { projectId: string; status: string; userMetadata?: { tabId?: string } }) => {
           if (s.projectId !== config.projectId || s.status !== 'RUNNING') {
             return false;
           }
-          // Must match our tabId in userMetadata
           const userMetadata = s.userMetadata || {};
           return userMetadata.tabId === this.tabId;
         })
         : [];
 
       if (matchingSessions.length > 0) {
-        const session = matchingSessions[0];
+        const session = matchingSessions[0] as { id: string; connectUrl: string };
         console.log(`[browserbase] Found existing session for tabId ${this.tabId}: ${session.id}`);
-        // Return both id and connectUrl from the API response
         return {
           id: session.id,
           connectUrl: session.connectUrl,
@@ -136,8 +128,6 @@ export class BrowserController {
 
   /**
    * Create a Browserbase cloud browser session with keepAlive enabled
-   * Sessions are tagged with the tabId for proper isolation
-   * Returns both session ID and connectUrl from the API
    */
   private async createBrowserbaseSession(): Promise<{ id: string; connectUrl: string }> {
     const config = this.options.browserbaseConfig;
@@ -145,7 +135,6 @@ export class BrowserController {
       throw new Error('Browserbase config is required when useBrowserbase is true');
     }
 
-    // First, try to find an existing running session (only if we have a tabId)
     if (this.tabId) {
       const existingSession = await this.findExistingBrowserbaseSession();
       if (existingSession) {
@@ -153,15 +142,13 @@ export class BrowserController {
       }
     }
 
-    // Create new session with keepAlive enabled and tabId in metadata
     const body: Record<string, unknown> = {
       projectId: config.projectId,
-      keepAlive: true, // Keep session alive even after disconnect
+      keepAlive: true,
     };
     if (config.region) {
       body.region = config.region;
     }
-    // Add tabId to userMetadata for session isolation
     if (this.tabId) {
       body.userMetadata = {
         tabId: this.tabId,
@@ -186,10 +173,6 @@ export class BrowserController {
     const data = await response.json();
     console.log(`[browserbase] Created new session with keepAlive (tabId: ${this.tabId || 'none'}): ${data.id}`);
 
-    // TEMPORARY: Log connectUrl when session is created - REMOVE BEFORE PROD
-    console.log(`[browserbase] connectUrl from CREATE (TEMPORARY DEBUG): ${data.connectUrl}`);
-
-    // Return both id and connectUrl from the API response
     return {
       id: data.id,
       connectUrl: data.connectUrl,
@@ -197,12 +180,10 @@ export class BrowserController {
   }
 
   /**
-   * Connect to a Browserbase session over CDP using the connectUrl from the API
+   * Connect to a Browserbase session over CDP
    */
   private async connectToBrowserbaseOverCdp(connectUrl: string): Promise<Browser> {
     try {
-      // TEMPORARY: Full connectUrl for local inspection - REMOVE BEFORE PROD
-      console.log(`[browserbase] FULL connectUrl (TEMPORARY DEBUG): ${connectUrl}`);
       console.log(`[browserbase] connectOverCDP: ${connectUrl.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
       return await chromium.connectOverCDP(connectUrl);
     } catch (e) {
@@ -220,7 +201,6 @@ export class BrowserController {
     }
 
     try {
-      // Get session details to retrieve the connectUrl
       const config = this.options.browserbaseConfig;
       const response = await fetch(`https://www.browserbase.com/v1/sessions/${sessionId}`, {
         headers: { 'x-bb-api-key': config.apiKey },
@@ -237,14 +217,10 @@ export class BrowserController {
         return false;
       }
 
-      // TEMPORARY: Log connectUrl when fetched from API - REMOVE BEFORE PROD
-      console.log(`[browserbase] connectUrl from API (TEMPORARY DEBUG): ${sessionData.connectUrl}`);
-
-      // Close existing browser connection if any
       if (this.browser) {
         try {
           await this.browser.close();
-        } catch (e) {
+        } catch {
           // Ignore errors when closing
         }
         this.browser = null;
@@ -255,7 +231,6 @@ export class BrowserController {
       this.browser = await this.connectToBrowserbaseOverCdp(sessionData.connectUrl);
       this.browserbaseSessionId = sessionId;
 
-      // Get the default context from the connected browser
       const contexts = this.browser.contexts();
       if (contexts.length > 0) {
         this.context = contexts[0];
@@ -265,7 +240,6 @@ export class BrowserController {
         });
       }
 
-      // Get existing page or create new one
       const pages = this.context.pages();
       if (pages.length > 0) {
         this.page = pages[0];
@@ -273,14 +247,12 @@ export class BrowserController {
         this.page = await this.context.newPage();
       }
 
-      // Set viewport on existing page
       await this.page.setViewportSize(this.options.viewport);
 
       console.log(`Reconnected to Browserbase session: ${sessionId}`);
       return true;
     } catch (error) {
       console.error(`Failed to reconnect to Browserbase session ${sessionId}:`, error);
-      // Clean up on failure
       this.browser = null;
       this.context = null;
       this.page = null;
@@ -297,12 +269,10 @@ export class BrowserController {
     }
 
     if (this.options.useBrowserbase && this.options.browserbaseConfig) {
-      // Connect to Browserbase cloud browser
       const session = await this.createBrowserbaseSession();
       this.browserbaseSessionId = session.id;
       this.browser = await this.connectToBrowserbaseOverCdp(session.connectUrl);
 
-      // Get the default context from the connected browser
       const contexts = this.browser.contexts();
       if (contexts.length > 0) {
         this.context = contexts[0];
@@ -312,7 +282,6 @@ export class BrowserController {
         });
       }
 
-      // Get existing page or create new one
       const pages = this.context.pages();
       if (pages.length > 0) {
         this.page = pages[0];
@@ -320,12 +289,10 @@ export class BrowserController {
         this.page = await this.context.newPage();
       }
 
-      // Set viewport on existing page
       await this.page.setViewportSize(this.options.viewport);
 
       console.log(`Connected to Browserbase session: ${this.browserbaseSessionId}`);
     } else {
-      // Launch local Chromium browser
       this.browser = await chromium.launch({
         headless: this.options.headless,
       });
@@ -337,7 +304,6 @@ export class BrowserController {
       this.page = await this.context.newPage();
     }
 
-    // Inject cookies if provided
     if (this.options.cookies && this.options.cookies.length > 0) {
       console.log(`[BrowserController] Setting ${this.options.cookies.length} cookies`);
       try {
@@ -362,7 +328,7 @@ export class BrowserController {
   }
 
   /**
-   * Get the Browserbase session ID (if using Browserbase)
+   * Get the Browserbase session ID
    */
   getBrowserbaseSessionId(): string | null {
     return this.browserbaseSessionId;
@@ -518,8 +484,6 @@ export class BrowserController {
   async click(x: number, y: number): Promise<void> {
     const page = this.getPage();
     await page.mouse.click(x, y);
-
-    // Track click event
     this.addClickEvent({ x, y, timestamp: Date.now(), type: 'click' });
   }
 
@@ -528,7 +492,6 @@ export class BrowserController {
    */
   private getLocator(selector: string) {
     const page = this.getPage();
-    // Check if it's an iframe selector (format: iframe[...] >> selector)
     if (selector.startsWith('iframe[')) {
       const parts = selector.split(' >> ');
       if (parts.length >= 2) {
@@ -546,13 +509,10 @@ export class BrowserController {
   async clickElement(selector: string): Promise<void> {
     const locator = this.getLocator(selector);
     try {
-      // Get bounding box before clicking to track where the click happened
       const box = await locator.boundingBox();
       await locator.click();
 
-      // Track click event with element position
       if (box) {
-        // Center of the element
         const x = box.x + box.width / 2;
         const y = box.y + box.height / 2;
         this.addClickEvent({
@@ -565,7 +525,6 @@ export class BrowserController {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Playwright "strict mode violation" means the selector matched multiple elements.
       if (msg.includes('strict mode violation')) {
         try {
           const count = await locator.count();
@@ -587,7 +546,6 @@ export class BrowserController {
    */
   private addClickEvent(event: ClickEvent): void {
     this.clickEvents.push(event);
-    // Keep only the last N events
     if (this.clickEvents.length > this.maxClickEvents) {
       this.clickEvents = this.clickEvents.slice(-this.maxClickEvents);
     }
@@ -694,7 +652,6 @@ export class BrowserController {
     const opts = { ...DEFAULT_STATE_OPTIONS, ...options };
     const mainState = await extractPageState(page, opts);
 
-    // Optionally extract iframe content
     if (opts.includeIframes) {
       for (const frame of page.frames()) {
         if (frame === page.mainFrame()) continue;
@@ -719,7 +676,7 @@ export class BrowserController {
                 return '';
               });
             }
-          } catch (e) { }
+          } catch { }
 
           if (!frameSelector) {
             frameSelector = `iframe[src="${frame.url()}"]`;
@@ -764,7 +721,6 @@ export class BrowserController {
     const page = this.getPage();
     return page.screenshot({ type: 'png' });
   }
-
 
   /**
    * Get the raw Playwright page for advanced operations

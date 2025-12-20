@@ -130,15 +130,15 @@ model AgentSession {
   @@map("agent_sessions")
 }
 
-// Browser sessions for serverless - maps tabId to Browserbase session
-model BrowserSession {
-  id                     String   @id @default(uuid()) @db.Uuid
-  tab_id                 String   @unique @db.VarChar(100)
-  browserbase_session_id String   @db.VarChar(100)
-  status                 String   @default("running") @db.VarChar(20)
-  created_at             DateTime @default(now()) @db.Timestamp(6)
-  updated_at             DateTime @default(now()) @updatedAt @db.Timestamp(6)
-
-  @@map("browser_sessions")
-}
+// NOTE: BrowserSession model removed - sessions are now managed in Railway service
+// If you need to restore, the model was:
+// model BrowserSession {
+//   id                     String   @id @default(uuid()) @db.Uuid
+//   tab_id                 String   @unique @db.VarChar(100)
+//   browserbase_session_id String   @db.VarChar(100)
+//   status                 String   @default("running") @db.VarChar(20)
+//   created_at             DateTime @default(now()) @db.Timestamp(6)
+//   updated_at             DateTime @default(now()) @updatedAt @db.Timestamp(6)
+//   @@map("browser_sessions")
+// }
 

@@ -1,65 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getGlobalSessionManager, getBrowserLogger } from '@/lib/browser';
-
-const sessionManager = getGlobalSessionManager();
-const logger = getBrowserLogger();
+import { isRailwayConfigured, proxyGetState } from '@/lib/browser/railway-proxy';
 
 /**
  * GET /api/browser/state - Get current page state
  * 
- * Query parameters:
- * - compact=true: Return AI-optimized compact state
- * - lite=true: Return minimal state (URL, title, element count)
- * - includeIframes=true: Include iframe content (full state only)
+ * Proxies to Railway browser control service.
  * 
- * Default: Returns full page state
+ * Query parameters:
+ * - tabId: string (required)
+ * - compact: "true" - Return AI-optimized compact state
+ * - lite: "true" - Return minimal state (URL, title, element count)
+ * - includeIframes: "true" - Include iframe content (full state only)
  */
 export async function GET(request: NextRequest) {
   try {
-    if (!sessionManager.hasSession()) {
-      return NextResponse.json(
-        { error: 'No active session' },
-        { status: 404 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
+    const tabId = searchParams.get('tabId');
     const compact = searchParams.get('compact') === 'true';
     const lite = searchParams.get('lite') === 'true';
     const includeIframes = searchParams.get('includeIframes') === 'true';
 
-    const controller = sessionManager.getController();
-    const start = Date.now();
-
-    let state;
-    let stateType: string;
-
-    if (compact) {
-      state = await controller.getStateCompact();
-      stateType = 'compact';
-    } else if (lite) {
-      state = await controller.getStateLite();
-      stateType = 'lite';
-    } else {
-      state = await controller.getState({ includeIframes });
-      stateType = 'full';
+    if (!tabId) {
+      return NextResponse.json(
+        { error: 'tabId is required' },
+        { status: 400 }
+      );
     }
 
-    logger.logResponse('get_state', { type: stateType }, Date.now() - start);
+    // Check if Railway is configured
+    if (!isRailwayConfigured()) {
+      return NextResponse.json(
+        { error: 'Railway browser service not configured' },
+        { status: 503 }
+      );
+    }
 
-    return NextResponse.json({
-      success: true,
-      stateType,
-      state,
+    // Proxy to Railway
+    const result = await proxyGetState({
+      tabId,
+      compact,
+      lite,
+      includeIframes,
     });
+
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error || 'Failed to get state' },
+        { status: result.status }
+      );
+    }
+
+    return NextResponse.json(result.data);
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    logger.logError('get_state', error);
     return NextResponse.json(
       { error: message },
       { status: 500 }
     );
   }
 }
-

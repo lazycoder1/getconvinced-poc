@@ -1,38 +1,56 @@
-import { NextResponse } from 'next/server';
-import { getGlobalSessionManager } from '@/lib/browser';
-
-const sessionManager = getGlobalSessionManager();
+import { NextRequest, NextResponse } from 'next/server';
+import { isRailwayConfigured, proxyGetLiveUrl } from '@/lib/browser/railway-proxy';
 
 /**
  * GET /api/browser/live-url - Get Browserbase live view URL
  * 
+ * Proxies to Railway browser control service.
+ * 
+ * Query:
+ * - tabId: string (required)
+ * 
  * Returns the debugger fullscreen URL for an interactive browser session.
- * Client should cache this URL in sessionStorage after receiving it.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // Check in-memory session
-    if (sessionManager.hasSession()) {
-      const controller = sessionManager.getController();
-      const liveUrl = await controller.getBrowserbaseLiveViewUrl();
+    const { searchParams } = new URL(request.url);
+    const tabId = searchParams.get('tabId');
 
-      if (liveUrl) {
-        return NextResponse.json({
-          liveUrl,
-          usingBrowserbase: true,
-        });
-      }
+    if (!tabId) {
+      return NextResponse.json(
+        { error: 'tabId is required' },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json(
-      { 
-        error: 'No active session or live view not available',
-        usingBrowserbase: false 
-      },
-      { status: 404 }
-    );
+    // Check if Railway is configured
+    if (!isRailwayConfigured()) {
+      return NextResponse.json(
+        { error: 'Railway browser service not configured', usingBrowserbase: false },
+        { status: 503 }
+      );
+    }
+
+    // Proxy to Railway
+    const result = await proxyGetLiveUrl(tabId);
+
+    if (!result.ok) {
+      return NextResponse.json(
+        { 
+          error: result.error || 'No active session or live view not available',
+          usingBrowserbase: false 
+        },
+        { status: result.status }
+      );
+    }
+
+    return NextResponse.json(result.data);
+
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: message },
+      { status: 500 }
+    );
   }
 }
