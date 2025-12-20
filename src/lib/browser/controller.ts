@@ -57,7 +57,53 @@ export class BrowserController {
   }
 
   /**
-   * Create a Browserbase cloud browser session
+   * Find an existing running Browserbase session to reuse
+   * Returns the session ID if found, null otherwise
+   */
+  private async findExistingBrowserbaseSession(): Promise<string | null> {
+    const config = this.options.browserbaseConfig;
+    if (!config) return null;
+
+    try {
+      const response = await fetch('https://www.browserbase.com/v1/sessions?status=RUNNING', {
+        method: 'GET',
+        headers: {
+          'x-bb-api-key': config.apiKey,
+        },
+      });
+
+      if (!response.ok) {
+        console.log('[browserbase] Failed to list sessions:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      const sessions = data.sessions || data || [];
+
+      // Find a session in our project that's running
+      const runningSessions = Array.isArray(sessions)
+        ? sessions.filter((s: any) =>
+            s.projectId === config.projectId &&
+            s.status === 'RUNNING'
+          )
+        : [];
+
+      if (runningSessions.length > 0) {
+        const session = runningSessions[0];
+        console.log(`[browserbase] Found existing running session: ${session.id}`);
+        return session.id;
+      }
+
+      console.log('[browserbase] No existing running sessions found');
+      return null;
+    } catch (error) {
+      console.error('[browserbase] Error finding existing session:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create a Browserbase cloud browser session with keepAlive enabled
    */
   private async createBrowserbaseSession(): Promise<string> {
     const config = this.options.browserbaseConfig;
@@ -65,8 +111,16 @@ export class BrowserController {
       throw new Error('Browserbase config is required when useBrowserbase is true');
     }
 
+    // First, try to find an existing running session
+    const existingSessionId = await this.findExistingBrowserbaseSession();
+    if (existingSessionId) {
+      return existingSessionId;
+    }
+
+    // Create new session with keepAlive enabled
     const body: Record<string, unknown> = {
       projectId: config.projectId,
+      keepAlive: true, // Keep session alive even after disconnect
     };
     if (config.region) {
       body.region = config.region;
@@ -87,7 +141,7 @@ export class BrowserController {
     }
 
     const data = await response.json();
-    console.log(`Created Browserbase session: ${data.id}`);
+    console.log(`[browserbase] Created new session with keepAlive: ${data.id}`);
     return data.id;
   }
 

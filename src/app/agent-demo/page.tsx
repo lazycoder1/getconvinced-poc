@@ -184,11 +184,33 @@ function AgentDemoPageContent() {
                 const agentConfigData = await agentConfigResponse.json();
 
                 setLoadingProgress(80);
-                setLoadingStage("Finalizing configuration...");
+                setLoadingStage("Warming up browser session...");
 
                 // Do not expose system prompts on the client
                 delete agentConfigData.system_prompt;
                 setAgentConfig(agentConfigData);
+
+                // Pre-warm browser session in background (don't await - let it run async)
+                // This starts the Browserbase session early so it's ready when agent needs it
+                fetch("/api/browser/session", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        headless: false,
+                        loadFromDb: true,
+                        websiteSlug,
+                    }),
+                })
+                    .then((res) => {
+                        if (res.ok) {
+                            console.log("[pre-warm] Browser session started successfully");
+                        } else {
+                            console.warn("[pre-warm] Browser session failed to start:", res.status);
+                        }
+                    })
+                    .catch((err) => {
+                        console.warn("[pre-warm] Browser session error:", err);
+                    });
 
                 // Complete loading
                 if (progressInterval) {
@@ -197,7 +219,7 @@ function AgentDemoPageContent() {
                 }
                 setLoadingProgress(100);
                 setLoadingStage("Ready!");
-                
+
                 // Small delay to show 100% before hiding loader
                 await new Promise(resolve => setTimeout(resolve, 300));
             } catch (err: any) {
