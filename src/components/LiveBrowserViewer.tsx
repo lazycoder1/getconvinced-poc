@@ -18,6 +18,8 @@ interface LiveBrowserViewerProps {
     websiteSlug?: string;
     /** Whether to show the save cookies button */
     showSaveCookies?: boolean;
+    /** Unique tab ID for session isolation (ensures each browser tab gets its own Browserbase session) */
+    tabId?: string;
 }
 
 type BrowserStatus = "disconnected" | "connecting" | "connected" | "error";
@@ -37,6 +39,7 @@ export default function LiveBrowserViewer({
     loadHubspotCookies = true,
     websiteSlug,
     showSaveCookies = false,
+    tabId,
 }: LiveBrowserViewerProps) {
     const [status, setStatus] = useState<BrowserStatus>("disconnected");
     const [isLoading, setIsLoading] = useState(false);
@@ -105,6 +108,8 @@ export default function LiveBrowserViewer({
                     websiteSlug,
                     // Keep legacy hubspot cookie loading as fallback (won't hurt if file doesn't exist)
                     loadHubspotCookies: loadHubspotCookies,
+                    // Pass tabId for session isolation
+                    tabId,
                 }),
             });
 
@@ -147,7 +152,7 @@ export default function LiveBrowserViewer({
         } finally {
             setIsLoading(false);
         }
-    }, [log, updateStatus, defaultUrl, loadHubspotCookies]);
+    }, [log, updateStatus, defaultUrl, loadHubspotCookies, websiteSlug, tabId]);
 
     const stopSession = useCallback(async () => {
         setIsLoading(true);

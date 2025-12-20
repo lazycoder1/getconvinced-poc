@@ -75,6 +75,10 @@ function AgentDemoPageContent() {
     const websiteSlug = searchParams.get("website") || "hubspot";
     const websiteDisplayName = websiteSlug ? websiteSlug.charAt(0).toUpperCase() + websiteSlug.slice(1) : "";
 
+    // Generate a unique tab ID once per page load for session isolation
+    // This ensures each browser tab gets its own Browserbase session
+    const [tabId] = useState(() => crypto.randomUUID());
+
     const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
     const [loading, setLoading] = useState(true);
     const [loadingProgress, setLoadingProgress] = useState(0);
@@ -192,6 +196,7 @@ function AgentDemoPageContent() {
 
                 // Pre-warm browser session in background (don't await - let it run async)
                 // This starts the Browserbase session early so it's ready when agent needs it
+                // Pass tabId for session isolation - ensures this tab gets its own session
                 fetch("/api/browser/session", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -199,11 +204,12 @@ function AgentDemoPageContent() {
                         headless: false,
                         loadFromDb: true,
                         websiteSlug,
+                        tabId, // Unique tab ID for session isolation
                     }),
                 })
                     .then((res) => {
                         if (res.ok) {
-                            console.log("[pre-warm] Browser session started successfully");
+                            console.log(`[pre-warm] Browser session started successfully (tabId: ${tabId})`);
                         } else {
                             console.warn("[pre-warm] Browser session failed to start:", res.status);
                         }
@@ -456,6 +462,7 @@ function AgentDemoPageContent() {
                                 onDebugMessage={(type, message) => handleDebugMessage(type, message)}
                                 websiteSlug={websiteSlug}
                                 showSaveCookies={true}
+                                tabId={tabId}
                             />
                         </div>
 

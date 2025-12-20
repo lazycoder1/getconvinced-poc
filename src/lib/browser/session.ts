@@ -20,8 +20,10 @@ export class SessionManager {
   /**
    * Create a new browser session
    * If a session already exists, attempts to reuse it (for Browserbase) or closes and recreates
+   * @param options - Browser controller options
+   * @param tabId - Unique identifier for this browser tab (used for session isolation)
    */
-  async createSession(options?: BrowserControllerOptions): Promise<SessionInfo> {
+  async createSession(options?: BrowserControllerOptions, tabId?: string): Promise<SessionInfo> {
     // Check for Browserbase environment variables
     const useBrowserbase = process.env.USE_BROWSERBASE === 'true';
     const browserbaseApiKey = process.env.BROWSERBASE_API_KEY;
@@ -57,7 +59,7 @@ export class SessionManager {
           console.log('Failed to reconnect to existing session, closing and creating new one:', error);
         }
       }
-      
+
       // Close existing session if we can't reuse it
       try {
         await this.session.controller.close();
@@ -69,6 +71,12 @@ export class SessionManager {
 
     const id = crypto.randomUUID();
     const controller = new BrowserController(mergedOptions);
+
+    // Set the tabId for session isolation before launching
+    if (tabId) {
+      controller.setTabId(tabId);
+    }
+
     await controller.launch();
 
     this.session = {

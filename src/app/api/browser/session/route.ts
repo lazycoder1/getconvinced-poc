@@ -56,23 +56,25 @@ async function loadCookiesFromDb(websiteSlug: string): Promise<Record<string, un
 
 /**
  * POST /api/browser/session - Create a new browser session
- * 
+ *
  * Body options:
  * - headless: boolean (default: false)
  * - cookies: array of cookies to load directly
  * - loadHubspotCookies: boolean - load cookies from hubspot-cookies.json (legacy)
  * - websiteSlug: string - load cookies from database for this website
  * - loadFromDb: boolean - whether to load cookies from database (requires websiteSlug)
+ * - tabId: string - unique identifier for this browser tab (used for session isolation)
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { 
-      headless = false, 
-      cookies, 
+    const {
+      headless = false,
+      cookies,
       loadHubspotCookies = false,
       websiteSlug,
       loadFromDb = false,
+      tabId, // Unique tab ID for session isolation
     } = body;
 
     // Determine which cookies to use (priority: direct cookies > DB > file)
@@ -89,19 +91,21 @@ export async function POST(request: NextRequest) {
       cookieSource = 'file';
     }
 
-    logger.logAction('create_session', { 
-      headless, 
+    logger.logAction('create_session', {
+      headless,
       hasCookies: !!finalCookies,
       cookieCount: finalCookies?.length || 0,
       cookieSource: finalCookies ? cookieSource : 'none',
       websiteSlug: websiteSlug || null,
+      tabId: tabId || null,
     });
     const start = Date.now();
 
+    // Pass tabId to createSession for Browserbase session isolation
     const session = await sessionManager.createSession({
       headless,
       cookies: finalCookies,
-    });
+    }, tabId);
 
     logger.setSessionId(session.id);
     logger.logResponse('create_session', session, Date.now() - start);

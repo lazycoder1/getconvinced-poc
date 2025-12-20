@@ -5,14 +5,13 @@ import {
   extractPageStateCompact, 
   DEFAULT_STATE_OPTIONS 
 } from './dom-extractor';
-import type { 
-  Cookie, 
-  BrowserbaseConfig, 
-  BrowserControllerOptions, 
-  PageState, 
-  PageStateLite, 
-  PageStateCompact, 
-  PageStateOptions 
+import type {
+  Cookie,
+  BrowserControllerOptions,
+  PageState,
+  PageStateLite,
+  PageStateCompact,
+  PageStateOptions
 } from './types';
 
 /**
@@ -41,9 +40,10 @@ export class BrowserController {
   private browserbaseSessionId: string | null = null;
   private clickEvents: ClickEvent[] = [];
   private maxClickEvents = 50; // Keep last 50 clicks
-  private options: BrowserControllerOptions & { 
-    headless: boolean; 
-    viewport: { width: number; height: number } 
+  private tabId: string | null = null; // Unique identifier for this tab/session
+  private options: BrowserControllerOptions & {
+    headless: boolean;
+    viewport: { width: number; height: number }
   };
 
   constructor(options: BrowserControllerOptions = {}) {
@@ -57,12 +57,35 @@ export class BrowserController {
   }
 
   /**
-   * Find an existing running Browserbase session to reuse
-   * Returns the session ID if found, null otherwise
+   * Set the unique tab ID for session isolation
+   * This ensures we only reuse sessions belonging to this specific tab
    */
-  private async findExistingBrowserbaseSession(): Promise<string | null> {
+  setTabId(tabId: string): void {
+    this.tabId = tabId;
+    console.log(`[browserbase] Tab ID set: ${tabId}`);
+  }
+
+  /**
+   * Get the current tab ID
+   */
+  getTabId(): string | null {
+    return this.tabId;
+  }
+
+  /**
+   * Find an existing running Browserbase session to reuse
+   * Only returns sessions that match our unique tabId to prevent session stealing
+   * Returns the session info (id and connectUrl) if found, null otherwise
+   */
+  private async findExistingBrowserbaseSession(): Promise<{ id: string; connectUrl: string } | null> {
     const config = this.options.browserbaseConfig;
     if (!config) return null;
+
+    // Without a tabId, we can't safely identify our own session
+    if (!this.tabId) {
+      console.log('[browserbase] No tabId set - cannot reuse sessions safely');
+      return null;
+    }
 
     try {
       const response = await fetch('https://www.browserbase.com/v1/sessions?status=RUNNING', {
@@ -80,21 +103,30 @@ export class BrowserController {
       const data = await response.json();
       const sessions = data.sessions || data || [];
 
-      // Find a session in our project that's running
-      const runningSessions = Array.isArray(sessions)
-        ? sessions.filter((s: any) =>
-            s.projectId === config.projectId &&
-            s.status === 'RUNNING'
-          )
+      // Find a session in our project that matches our tabId
+      const matchingSessions = Array.isArray(sessions)
+        ? sessions.filter((s: any) => {
+            // Must be in our project and running
+            if (s.projectId !== config.projectId || s.status !== 'RUNNING') {
+              return false;
+            }
+            // Must match our tabId in metadata
+            const metadata = s.metadata || {};
+            return metadata.tabId === this.tabId;
+          })
         : [];
 
-      if (runningSessions.length > 0) {
-        const session = runningSessions[0];
-        console.log(`[browserbase] Found existing running session: ${session.id}`);
-        return session.id;
+      if (matchingSessions.length > 0) {
+        const session = matchingSessions[0];
+        console.log(`[browserbase] Found existing session for tabId ${this.tabId}: ${session.id}`);
+        // Return both id and connectUrl from the API response
+        return {
+          id: session.id,
+          connectUrl: session.connectUrl,
+        };
       }
 
-      console.log('[browserbase] No existing running sessions found');
+      console.log(`[browserbase] No existing session found for tabId: ${this.tabId}`);
       return null;
     } catch (error) {
       console.error('[browserbase] Error finding existing session:', error);
@@ -104,26 +136,37 @@ export class BrowserController {
 
   /**
    * Create a Browserbase cloud browser session with keepAlive enabled
+   * Sessions are tagged with the tabId for proper isolation
+   * Returns both session ID and connectUrl from the API
    */
-  private async createBrowserbaseSession(): Promise<string> {
+  private async createBrowserbaseSession(): Promise<{ id: string; connectUrl: string }> {
     const config = this.options.browserbaseConfig;
     if (!config) {
       throw new Error('Browserbase config is required when useBrowserbase is true');
     }
 
-    // First, try to find an existing running session
-    const existingSessionId = await this.findExistingBrowserbaseSession();
-    if (existingSessionId) {
-      return existingSessionId;
+    // First, try to find an existing running session (only if we have a tabId)
+    if (this.tabId) {
+      const existingSession = await this.findExistingBrowserbaseSession();
+      if (existingSession) {
+        return existingSession;
+      }
     }
 
-    // Create new session with keepAlive enabled
+    // Create new session with keepAlive enabled and tabId in metadata
     const body: Record<string, unknown> = {
       projectId: config.projectId,
       keepAlive: true, // Keep session alive even after disconnect
     };
     if (config.region) {
       body.region = config.region;
+    }
+    // Add tabId to metadata for session isolation
+    if (this.tabId) {
+      body.metadata = {
+        tabId: this.tabId,
+        createdAt: new Date().toISOString(),
+      };
     }
 
     const response = await fetch('https://www.browserbase.com/v1/sessions', {
@@ -141,66 +184,26 @@ export class BrowserController {
     }
 
     const data = await response.json();
-    console.log(`[browserbase] Created new session with keepAlive: ${data.id}`);
-    return data.id;
+    console.log(`[browserbase] Created new session with keepAlive (tabId: ${this.tabId || 'none'}): ${data.id}`);
+
+    // Return both id and connectUrl from the API response
+    return {
+      id: data.id,
+      connectUrl: data.connectUrl,
+    };
   }
 
   /**
-   * Build candidate WebSocket endpoints for connecting to a Browserbase session.
-   * Browserbase sessions can be created in specific regions (e.g. ap-southeast-1),
-   * and the connect endpoint must target the same region.
-   *
-   * Ref: Browser Regions docs (sessions created in non-default region must be connected to in-region).
+   * Connect to a Browserbase session over CDP using the connectUrl from the API
    */
-  private buildBrowserbaseWsEndpoints(sessionId: string): string[] {
-    const cfg = this.options.browserbaseConfig;
-    if (!cfg) return [];
-
-    const apiKey = encodeURIComponent(cfg.apiKey);
-    const sid = encodeURIComponent(sessionId);
-    const region = cfg.region ? encodeURIComponent(cfg.region) : null;
-
-    const base = `wss://connect.browserbase.com?apiKey=${apiKey}&sessionId=${sid}`;
-
-    if (region) {
-      return [
-        // Candidate 1: regional hostname (most likely pattern for multi-region CDP gateways)
-        `wss://connect-${region}.browserbase.com?apiKey=${apiKey}&sessionId=${sid}`,
-        // Candidate 2: alternate regional hostname pattern
-        `wss://connect.${region}.browserbase.com?apiKey=${apiKey}&sessionId=${sid}`,
-        // Candidate 3: base host + region query param
-        `${base}&region=${region}`,
-        // Candidate 4: base host (default region)
-        base,
-      ];
+  private async connectToBrowserbaseOverCdp(connectUrl: string): Promise<Browser> {
+    try {
+      console.log(`[browserbase] connectOverCDP: ${connectUrl.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
+      return await chromium.connectOverCDP(connectUrl);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`Failed to connect to Browserbase session over CDP: ${msg}`);
     }
-
-    return [base];
-  }
-
-  /**
-   * Connect to an existing Browserbase session over CDP, trying regional endpoints if needed.
-   */
-  private async connectToBrowserbaseOverCdp(sessionId: string): Promise<Browser> {
-    const endpoints = this.buildBrowserbaseWsEndpoints(sessionId);
-    let lastErr: unknown = null;
-
-    for (const wsEndpoint of endpoints) {
-      try {
-        console.log(`[browserbase] connectOverCDP attempting: ${wsEndpoint.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
-        return await chromium.connectOverCDP(wsEndpoint);
-      } catch (e) {
-        lastErr = e;
-        const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`[browserbase] connectOverCDP failed for endpoint: ${wsEndpoint.replace(/apiKey=[^&]+/, 'apiKey=***')} :: ${msg}`);
-      }
-    }
-
-    const tail = lastErr instanceof Error ? lastErr.message : String(lastErr);
-    throw new Error(
-      `Failed to connect to Browserbase session over CDP after trying ${endpoints.length} endpoint(s). ` +
-        `Last error: ${tail}`
-    );
   }
 
   /**
@@ -212,6 +215,23 @@ export class BrowserController {
     }
 
     try {
+      // Get session details to retrieve the connectUrl
+      const config = this.options.browserbaseConfig;
+      const response = await fetch(`https://www.browserbase.com/v1/sessions/${sessionId}`, {
+        headers: { 'x-bb-api-key': config.apiKey },
+      });
+
+      if (!response.ok) {
+        console.log(`[browserbase] Failed to get session details: ${response.status}`);
+        return false;
+      }
+
+      const sessionData = await response.json();
+      if (!sessionData.connectUrl) {
+        console.log('[browserbase] Session does not have a connectUrl');
+        return false;
+      }
+
       // Close existing browser connection if any
       if (this.browser) {
         try {
@@ -224,7 +244,7 @@ export class BrowserController {
         this.page = null;
       }
 
-      this.browser = await this.connectToBrowserbaseOverCdp(sessionId);
+      this.browser = await this.connectToBrowserbaseOverCdp(sessionData.connectUrl);
       this.browserbaseSessionId = sessionId;
 
       // Get the default context from the connected browser
@@ -270,8 +290,9 @@ export class BrowserController {
 
     if (this.options.useBrowserbase && this.options.browserbaseConfig) {
       // Connect to Browserbase cloud browser
-      this.browserbaseSessionId = await this.createBrowserbaseSession();
-      this.browser = await this.connectToBrowserbaseOverCdp(this.browserbaseSessionId);
+      const session = await this.createBrowserbaseSession();
+      this.browserbaseSessionId = session.id;
+      this.browser = await this.connectToBrowserbaseOverCdp(session.connectUrl);
 
       // Get the default context from the connected browser
       const contexts = this.browser.contexts();
