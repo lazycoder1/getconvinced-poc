@@ -150,8 +150,9 @@ export default function LiveBrowserViewer({
                 }
             }
 
-            // Fallback: check API - pass any known browserbaseSessionId for faster reconnection
-            const response = await fetch("/api/browser/session");
+            // Fallback: check API with tabId for DB lookup
+            const sessionUrl = tabId ? `/api/browser/session?tabId=${encodeURIComponent(tabId)}` : "/api/browser/session";
+            const response = await fetch(sessionUrl);
             if (response.ok) {
                 const sessionData = await response.json();
 
@@ -258,9 +259,10 @@ export default function LiveBrowserViewer({
         log("🛑 Stopping browser session...");
 
         try {
-            await fetch("/api/browser/session", { method: "DELETE" });
+            const deleteUrl = tabId ? `/api/browser/session?tabId=${encodeURIComponent(tabId)}` : "/api/browser/session";
+            await fetch(deleteUrl, { method: "DELETE" });
             log("✅ Session stopped");
-
+            
             // Clear browser cache
             if (tabId) {
                 clearCachedSession(tabId);
