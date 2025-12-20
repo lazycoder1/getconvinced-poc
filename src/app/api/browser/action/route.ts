@@ -7,18 +7,49 @@ const logger = getBrowserLogger();
 /**
  * Try to reconnect to an existing Browserbase session
  * Used when action endpoint hits a different serverless instance
+ * 
+ * Priority:
+ * 1. Use provided sessionId (most reliable)
+ * 2. Fall back to searching for running sessions
  */
-async function ensureSession(): Promise<boolean> {
+async function ensureSession(browserbaseSessionId?: string): Promise<boolean> {
   // Already have session in memory
   if (sessionManager.hasSession()) {
     return true;
   }
 
-  // Try to find and reconnect to a running session
   const apiKey = process.env.BROWSERBASE_API_KEY;
   const projectId = process.env.BROWSERBASE_PROJECT_ID;
   if (!apiKey || !projectId) return false;
 
+  // If we have a specific session ID, try to reconnect to it directly
+  if (browserbaseSessionId) {
+    console.log(`[action] Reconnecting to specific session: ${browserbaseSessionId}`);
+    const { BrowserController } = await import('@/lib/browser/controller');
+    const controller = new BrowserController({
+      useBrowserbase: true,
+      browserbaseConfig: { apiKey, projectId },
+    });
+
+    try {
+      const reconnected = await controller.reconnectToBrowserbaseSession(browserbaseSessionId);
+      if (reconnected) {
+        // @ts-ignore - store in session manager
+        sessionManager['session'] = {
+          id: browserbaseSessionId,
+          controller,
+          createdAt: new Date(),
+          browserbaseSessionId: browserbaseSessionId,
+        };
+        console.log(`[action] Successfully reconnected to ${browserbaseSessionId}`);
+        return true;
+      }
+    } catch (error) {
+      console.error(`[action] Failed to reconnect to ${browserbaseSessionId}:`, error);
+    }
+  }
+
+  // Fallback: search for any running session in our project
   try {
     const response = await fetch('https://www.browserbase.com/v1/sessions?status=RUNNING', {
       headers: { 'x-bb-api-key': apiKey },
@@ -32,7 +63,7 @@ async function ensureSession(): Promise<boolean> {
         : null;
 
       if (runningSession) {
-        console.log(`[action] Reconnecting to session: ${runningSession.id}`);
+        console.log(`[action] Reconnecting to found session: ${runningSession.id}`);
         const { BrowserController } = await import('@/lib/browser/controller');
         const controller = new BrowserController({
           useBrowserbase: true,
@@ -54,7 +85,7 @@ async function ensureSession(): Promise<boolean> {
       }
     }
   } catch (error) {
-    console.error('[action] Failed to reconnect:', error);
+    console.error('[action] Failed to find/reconnect:', error);
   }
   return false;
 }
@@ -82,8 +113,13 @@ async function ensureSession(): Promise<boolean> {
  */
 export async function POST(request: NextRequest) {
   try {
+    const body = await request.json();
+    
+    // Extract session info before parsing action (tools pass this for reliable reconnection)
+    const browserbaseSessionId = body.browserbaseSessionId as string | undefined;
+    
     // Ensure we have a session (reconnect if needed for serverless)
-    const hasSession = await ensureSession();
+    const hasSession = await ensureSession(browserbaseSessionId);
     if (!hasSession) {
       return NextResponse.json(
         { error: 'No active session. Create one first via POST /api/browser/session' },
@@ -91,7 +127,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
     const parsed = BrowserActionSchema.safeParse(body);
 
     if (!parsed.success) {

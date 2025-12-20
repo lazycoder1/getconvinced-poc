@@ -226,8 +226,23 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const tabId = searchParams.get('tabId');
+    const sessionId = searchParams.get('sessionId'); // Direct session ID from client cache
 
-    // 2. If tabId provided, check PostgreSQL
+    // 2. If sessionId provided, try direct reconnection (most reliable)
+    if (sessionId) {
+      console.log(`[session GET] Reconnecting to cached sessionId: ${sessionId}`);
+      const reconnected = await reconnectToSession(sessionId);
+      if (reconnected) {
+        return NextResponse.json({
+          id: sessionId,
+          createdAt: new Date(),
+          browserbaseSessionId: sessionId,
+        });
+      }
+      console.log(`[session GET] Failed to reconnect to sessionId: ${sessionId}`);
+    }
+
+    // 3. If tabId provided, check PostgreSQL
     if (tabId) {
       const dbSession = await prisma.browserSession.findUnique({
         where: { tab_id: tabId },
@@ -246,7 +261,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 3. No tabId (tools case) - search for any running session in our project
+    // 4. Fallback: search for any running session in our project
     const apiKey = process.env.BROWSERBASE_API_KEY;
     const projectId = process.env.BROWSERBASE_PROJECT_ID;
 

@@ -19,13 +19,21 @@ const getApiBase = () => {
 
 // Helper to make API calls with error handling
 async function browserApiCall(endpoint: string, body?: Record<string, unknown>) {
+    // Include session info in all API calls for reliable serverless reconnection
+    const cached = getCachedSessionInfo();
+    const enrichedBody = body ? { 
+        ...body, 
+        tabId: cached.tabId,
+        browserbaseSessionId: cached.browserbaseSessionId,
+    } : undefined;
+    
     const url = `${getApiBase()}/api/browser/${endpoint}`;
 
     try {
         const res = await fetch(url, {
-            method: body ? 'POST' : 'GET',
+            method: enrichedBody ? 'POST' : 'GET',
             headers: { 'Content-Type': 'application/json' },
-            body: body ? JSON.stringify(body) : undefined,
+            body: enrichedBody ? JSON.stringify(enrichedBody) : undefined,
         });
 
         if (!res.ok) {
@@ -58,8 +66,31 @@ async function getPageState(): Promise<Record<string, unknown>> {
     }
 }
 
+/**
+ * Get cached session info from sessionStorage (client-side)
+ */
+function getCachedSessionInfo(): { tabId?: string; browserbaseSessionId?: string } {
+    if (typeof window === 'undefined') return {};
+    try {
+        const tabId = sessionStorage.getItem('browserTabId');
+        const browserbaseSessionId = sessionStorage.getItem('browserbaseSessionId');
+        return { 
+            tabId: tabId || undefined, 
+            browserbaseSessionId: browserbaseSessionId || undefined 
+        };
+    } catch {
+        return {};
+    }
+}
+
 async function getSessionInfo(): Promise<{ success: boolean; hasSession: boolean; info?: any; error?: string }> {
-    const url = `${getApiBase()}/api/browser/session`;
+    // Pass tabId from sessionStorage so server can find the correct session
+    const cached = getCachedSessionInfo();
+    const params = new URLSearchParams();
+    if (cached.tabId) params.set('tabId', cached.tabId);
+    if (cached.browserbaseSessionId) params.set('sessionId', cached.browserbaseSessionId);
+    
+    const url = `${getApiBase()}/api/browser/session${params.toString() ? '?' + params.toString() : ''}`;
     try {
         const res = await fetch(url);
         if (!res.ok) {
